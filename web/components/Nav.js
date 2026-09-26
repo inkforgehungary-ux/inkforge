@@ -20,10 +20,11 @@ export default function Nav({ lang, t }) {
     <nav className="sticky top-0 z-40 border-b border-stone-800 bg-stone-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-3">
         <Link href={`/${lang}`} className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/api/static/inkforge-logo.png" alt="InkForge" className="h-8 w-auto" />
         </Link>
 
-        <div className="ml-auto hidden items-center gap-1 md:flex">
+        <div className="ms-auto hidden items-center gap-1 md:flex">
           {items.map((it) => (
             <Link
               key={it.href}
@@ -35,7 +36,7 @@ export default function Nav({ lang, t }) {
           ))}
         </div>
 
-        <div className="ml-auto md:ml-2">
+        <div className="ms-auto md:ms-2">
           <LanguageSwitcher current={lang} label={t('common.lang')} />
         </div>
 

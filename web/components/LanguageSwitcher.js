@@ -32,18 +32,18 @@ export default function LanguageSwitcher({ current, label }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 max-h-80 w-48 overflow-y-auto rounded-lg border border-stone-700 bg-stone-900 py-1 shadow-xl">
+        <div className="absolute end-0 z-50 mt-2 max-h-80 w-56 overflow-y-auto rounded-lg border border-stone-700 bg-stone-900 py-1 shadow-xl">
           {LOCALES.map((l) => (
             <button
               key={l.code}
               onClick={() => switchTo(l.code)}
-              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition hover:bg-stone-800 ${
+              className={`flex w-full items-center gap-3 px-3 py-2 text-start text-sm transition hover:bg-stone-800 ${
                 l.code === current ? 'text-amber-400' : 'text-stone-300'
               }`}
             >
               <span>{l.flag}</span>
               <span>{l.name}</span>
-              <span className="ml-auto text-xs text-stone-500">{l.code.toUpperCase()}</span>
+              <span className="ms-auto text-xs text-stone-500">{l.code.toUpperCase()}</span>
             </button>
           ))}
         </div>

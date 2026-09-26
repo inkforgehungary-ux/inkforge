@@ -1,12 +1,12 @@
 export const metadata = {
-  title: 'InkForge – Tattoo Stencil Platform',
+  title: 'InkForge – Tattoo Stencil Platform | B2B',
   description:
-    'Az otletedbol tiszta sablon. Feltoltott kepbol nyomtatasra kesz tattoo stencil, pontos mm-merettel.',
+    'Raktar nelkuli B2B stencil generalas tetovalostudioknak. Feltoltott kepbol nyomtatasra kesz sablon, pontos mm-merettel — a feldolgozas a bongeszoben fut.',
   icons: { icon: '/api/static/favicon.png' },
   openGraph: {
     title: 'InkForge – Tattoo Stencil Platform',
     description:
-      'Az otletedbol tiszta sablon. Feltoltott kepbol nyomtatasra kesz tattoo stencil.',
+      'Raktar nelkuli B2B stencil generalas tetovalostudioknak. Feltoltott kepbol nyomtatasra kesz sablon.',
     images: [{ url: '/api/static/inkforge-opengraph.png', width: 1200, height: 630, alt: 'InkForge' }],
     type: 'website',
     locale: 'hu_HU',

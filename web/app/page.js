@@ -71,20 +71,18 @@ export default function Home() {
           />
         </picture>
 
-        {/* Logo a bal felso sarokban */}
         <div className="absolute top-4 left-4 sm:top-6 sm:left-8">
           <img src="/api/static/inkforge-logo.png" alt="InkForge" className="h-10 sm:h-14 w-auto" />
         </div>
 
-        {/* Szoveg a kep also reszere, a sotet atmenet ala */}
         <div className="absolute bottom-0 left-0 right-0 px-6 pb-6 sm:pb-10">
           <div className="mx-auto max-w-5xl">
             <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-lg">
               Az otletedbol tiszta sablon
             </h1>
             <p className="mt-2 max-w-2xl text-sm sm:text-base text-stone-300 drop-shadow">
-              Feltoltod a kepet, a bongeszodben lefut a feldolgozas — a kep nem hagyja el a gepedet.
-              Kesz sablon pontos mm-merettel, 300 DPI-n, nyomtatasra.
+              Nincs raktar, nincs keszlet — csak a sablon. Feltoltod a kepet, a bongeszodben
+              lefut a feldolgozas, es kesz a nyomtatasra allo stencil. A kep nem hagyja el a gepedet.
             </p>
             <button
               onClick={() => document.getElementById('muhely')?.scrollIntoView({ behavior: 'smooth' })}
@@ -96,9 +94,34 @@ export default function Home() {
         </div>
       </header>
 
+      {/* ============ B2B SAV ============ */}
+      <section className="border-b border-stone-800 bg-stone-950">
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <div className="grid gap-6 sm:grid-cols-3">
+            <Tile
+              title="Raktar nelkul"
+              text="Nem tartunk keszletet es nem szallitunk. A sablon digitalisan keszul el, te nyomtatod — vagy a sajat nyomtatodbol dolgozol."
+            />
+            <Tile
+              title="B2B, studioknak"
+              text="Egy fiók, tobb munkatars. Kozos sablontar, batch feldolgozas, API a sajat rendszeredhez."
+            />
+            <Tile
+              title="Bongeszoben fut"
+              text="A feldolgozas a sajat gepeden tortenik. A dizajn nem hagyja el a studiot — ez a GDPR-baratsagos ut."
+            />
+          </div>
+        </div>
+      </section>
+
       {/* ============ MUHELY ============ */}
       <section id="muhely" className="mx-auto max-w-5xl px-6 py-12">
-        <div className="grid gap-8 md:grid-cols-2">
+        <h2 className="text-xl font-semibold tracking-tight">Stencil generalas</h2>
+        <p className="mt-1 text-sm text-stone-400">
+          Toltd fel a kezdeti kezdeti kepet, allitsd be a meretet, es a motor elvegzi a tobbit.
+        </p>
+
+        <div className="mt-8 grid gap-8 md:grid-cols-2">
           <div>
             <div
               onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
@@ -122,7 +145,7 @@ export default function Home() {
             </div>
 
             <div className="mt-6 space-y-4 rounded-xl border border-stone-800 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-400">Beallitasok</h2>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-400">Beallitasok</h3>
 
               <label className="block">
                 <span className="flex justify-between text-sm text-stone-300">
@@ -182,7 +205,7 @@ export default function Home() {
 
           <div>
             <div className="rounded-xl border border-stone-800 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-stone-400">Eredmeny</h2>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-400">Eredmeny</h3>
 
               {!result && !busy && (
                 <p className="mt-4 text-sm text-stone-500">
@@ -241,13 +264,47 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-stone-800 px-6 py-6 text-xs text-stone-600">
+      {/* ============ HOGYAN MUKODIK ============ */}
+      <section className="border-t border-stone-800 bg-stone-950">
+        <div className="mx-auto max-w-5xl px-6 py-12">
+          <h2 className="text-xl font-semibold tracking-tight">Hogyan mukodik</h2>
+          <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <Step n="1" title="Feltoltes" text="Kep vagy szoveges leiras. A kep a bongeszoben marad." />
+            <Step n="2" title="Meres" text="A rendszer megnezi a fenyeseseget es az elsuruseget, es maga valaszt agat." />
+            <Step n="3" title="Bridge" text="A szigeteket hidakkal kotjuk ossze, hogy a sablon ne essen szet vagaskor." />
+            <Step n="4" title="Nyomtatas" text="300 DPI PNG, pontos mm-merettel. A 10 mm-es kalibracios vonallal ellenorzod." />
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
         <div className="mx-auto max-w-5xl flex flex-wrap items-center justify-between gap-3">
-          <span>InkForge · Tattoo Stencil Platform</span>
+          <span>InkForge · Tattoo Stencil Platform · B2B</span>
           <span>a feldolgozas a bongeszodben fut, a kep nem kerul szerverre</span>
         </div>
       </footer>
     </main>
+  );
+}
+
+function Tile({ title, text }) {
+  return (
+    <div className="rounded-xl border border-stone-800 bg-stone-900/40 p-5">
+      <h3 className="font-semibold text-amber-400">{title}</h3>
+      <p className="mt-2 text-sm leading-relaxed text-stone-400">{text}</p>
+    </div>
+  );
+}
+
+function Step({ n, title, text }) {
+  return (
+    <div>
+      <div className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-600/60 text-sm font-semibold text-amber-400">
+        {n}
+      </div>
+      <h3 className="mt-3 font-semibold text-stone-200">{title}</h3>
+      <p className="mt-1 text-sm leading-relaxed text-stone-400">{text}</p>
+    </div>
   );
 }
 

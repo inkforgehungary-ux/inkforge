@@ -1,27 +1,20 @@
 # InkForge – Web frontend
 
-Next.js 14 (App Router) + Tailwind. A stencil motor a böngészőben fut, Web Workerben — a kép nem hagyja el a gépet.
+Next.js 14 (App Router) + Tailwind. A stencil motor a bongeszoben fut, Web Workerben — a kep nem hagyja el a gepet.
 
 ## Mappa
 
-| Fájl | Tartalom |
+| Fajl | Tartalom |
 |---|---|
-| `app/layout.js` | gyökér layout, metaadatok |
-| `app/page.js` | a feltöltő oldal és az eredmény nézet |
-| `app/globals.css` | Tailwind + sötét téma |
-| `lib/stencil-client.js` | kép dekódolás + Worker híd |
-| `lib/stencil.worker.js` | a motor (a `pipeline/js/stencil-v3.js` logikája) |
-| `vercel.json` | Vercel konfiguráció |
+| `app/layout.js` | gyoker layout, metaadatok, openGraph |
+| `app/page.js` | a feltolto oldal es az eredmeny nezet |
+| `app/globals.css` | Tailwind + sotet tema |
+| `lib/stencil-client.js` | kep dekodolas + Worker hid |
+| `lib/stencil.worker.js` | a motor (a `pipeline/js/stencil-v3.js` logikaja) |
+| `public/` | logo, openGraph kep, favicon |
+| `vercel.json` | Vercel konfiguracio |
 
-## Miért Web Worker
-
-A teljes pipeline CPU-n fut. Nagy képen (1600 px) ez több másodperc is lehet — ha a fő szálon futna, a felület megfagyna. A Workerben a felhasználó látja a folyamatjelzést, és a böngésző folyamatosan válaszol.
-
-## Kép a gépen marad
-
-A dekódolás és a feldolgozás **teljesen a böngészőben** történik. Feltöltés nincs, szerver nincs — ez a stúdióknak fontos adatvédelmi érv: a dizájn nem hagyja el a gépet.
-
-## Futtatás
+## Futtatas
 
 ```bash
 cd web
@@ -29,14 +22,16 @@ npm install
 npm run dev
 ```
 
-A Vercel a repó importálásakor automatikusan felismeri a Next.js projektet. Ha a `web/` alkönyvtárban van a projekt, a Vercel projekt beállításánál a **Root Directory**-t `web`-re kell állítani.
+Nyisd meg: http://localhost:3000
 
-## Paraméterek
+## Vercel
 
-| Beállítás | Hatás |
-|---|---|
-| Szélesség (mm) | a kész sablon fizikai mérete a papíron |
-| Vonalsúly | vékonyítás / vastagítás |
-| Híd vastagság | a szigeteket összekötő hidak vastagsága |
-| Ág | automatikus / top-hat / Otsu |
-| Felbontás | 300 / 600 / 150 DPI |
+A repo importalasakor a `vercel.json` a gyokerben megadja a keretrendszert es a build parancsot. Ha a `web/` alkonyvtar miatt nem talalja a `package.json`-t, allitsd a **Root Directory**-t `web`-re.
+
+## Miért Web Worker
+
+A teljes motor CPU-n fut. Nagy kepen (1600 px) ez tobb masodperc is lehet — a Workerben a felulet folyamatosan valaszol, es a felhasznalo latja a folyamatjelzest.
+
+## A kep a gepen marad
+
+A dekodolas es a feldolgozas teljesen a bongeszoben tortenik. Feltoltes nincs, szerver nincs — ez a studioknak fontos adatvedelmi erv.

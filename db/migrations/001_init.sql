@@ -1,9 +1,11 @@
--- InkForge – kezdő adatbázis séma (Supabase / Postgres)
--- Futtatás: Supabase SQL editor vagy CLI migrációval.
+-- InkForge – adatbázis migracio
+-- Futtatas a Supabase SQL editorban (vagy psql-lel):
+--   psql "$DATABASE_URL" -f db/migrations/001_init.sql
+--
+-- Ez a fajl onmagaban eleg: letrehozza a tablakat, a stilusokat es a policy-ket.
 
 create extension if not exists "pgcrypto";
 
--- ---------- Felhasználók ----------
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
@@ -13,7 +15,6 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
--- ---------- Stúdiók ----------
 create table if not exists studios (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -24,11 +25,11 @@ create table if not exists studios (
   created_at timestamptz not null default now()
 );
 
+alter table profiles drop constraint if exists profiles_studio_fk;
 alter table profiles
   add constraint profiles_studio_fk
   foreign key (studio_id) references studios(id) on delete set null;
 
--- ---------- Stílus kategóriák ----------
 create table if not exists styles (
   id serial primary key,
   slug text unique not null,
@@ -38,17 +39,16 @@ create table if not exists styles (
 );
 
 insert into styles (slug, name_hu, description, sort_order) values
-  ('realistic',   'Realisztikus',   'Fotorealisztikus árnyékolás, részletek',      1),
-  ('blackwork',   'Blackwork',      'Nagy fekete foltok, tiszta kontúr',          2),
-  ('japanese',    'Japán',          'Irezumi, hullám, sárkány, koi',              3),
+  ('realistic',   'Realisztikus',   'Fotorealisztikus arnyekolas, reszletek',      1),
+  ('blackwork',   'Blackwork',      'Nagy fekete foltok, tiszta kontur',          2),
+  ('japanese',    'Japan',          'Irezumi, hullam, sarkany, koi',              3),
   ('geometric',   'Geometrikus',    'Szent geometria, mandala, vonal',            4),
-  ('chicano',     'Chicano',        'Finom vonal, vallásos, fekete-szürke',       5),
-  ('nordic',      'Nordic / Kelta', 'Runa, csomópont, mitológia',                 6),
-  ('dark',        'Sötét',          'Gothic, horror, okkult',                     7),
-  ('custom',      'Egyedi',         'Vegyes vagy saját stílus',                   8)
+  ('chicano',     'Chicano',        'Finom vonal, vallasos, fekete-szurke',       5),
+  ('nordic',      'Nordic / Kelta', 'Runa, csomopont, mitologia',                 6),
+  ('dark',        'Sotet',          'Gothic, horror, okkult',                     7),
+  ('custom',      'Egyedi',         'Vegyes vagy sajat stilus',                   8)
 on conflict (slug) do nothing;
 
--- ---------- Stencil job ----------
 create table if not exists stencils (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references profiles(id) on delete cascade,
@@ -79,7 +79,6 @@ create table if not exists stencils (
 create index if not exists stencils_owner_idx on stencils (owner_id, created_at desc);
 create index if not exists stencils_status_idx on stencils (status);
 
--- ---------- Több színréteg ----------
 create table if not exists stencil_layers (
   id uuid primary key default gen_random_uuid(),
   stencil_id uuid not null references stencils(id) on delete cascade,
@@ -89,7 +88,6 @@ create table if not exists stencil_layers (
   unique (stencil_id, layer_index)
 );
 
--- ---------- Kredit / előfizetés elszámolás ----------
 create table if not exists credit_ledger (
   id uuid primary key default gen_random_uuid(),
   studio_id uuid not null references studios(id) on delete cascade,
@@ -101,7 +99,6 @@ create table if not exists credit_ledger (
 
 create index if not exists credit_ledger_studio_idx on credit_ledger (studio_id, created_at desc);
 
--- ---------- RLS (saját adat csak a sajátja) ----------
 alter table profiles       enable row level security;
 alter table studios        enable row level security;
 alter table stencils       enable row level security;
@@ -126,7 +123,6 @@ drop policy if exists "own studio" on studios;
 create policy "own studio" on studios
   for select using (auth.uid() = owner_id);
 
--- A styles tábla mindenkinek olvasható (nem érzékeny adat)
 alter table styles enable row level security;
 drop policy if exists "styles readable" on styles;
 create policy "styles readable" on styles

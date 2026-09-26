@@ -2,51 +2,26 @@
 
 AI-alapú tattoo stencil generátor B2B platform tetováló stúdióknak és művészeknek.
 
+**Állapot: a motor és a frontend működik. Az adatbázis migráció egy lépésre van.**
+
 ## Mi ez
-Feltöltött képből vagy szöveges leírásból **nyomtatásra kész, tiszta stencil** készül — automatikus bridge-eléssel, 300 DPI PDF kimenettel, thermal printer profilokkal.
+Feltöltött képből **nyomtatásra kész, tiszta stencil** készül — automatikus bridge-eléssel, 300 DPI kimenettel, pontos mm-mérettel.
 
-## Alapelv (költség)
-A munka **~80%-a nem AI**: kontúrkiemelés, threshold, bridge-generálás és méretezés sima CPU-s képfeldolgozás.
-Csak a „szövegből dizájn" rész igényel GPU-t, és az **bérelt API**, nem saját gép.
+## Gyors indítás
 
-Ezért az indulás havi ~0–30 USD-ból megoldható, gyenge fejlesztői géppel.
-
-## Architektúra
-
-```
-Next.js frontend (Vercel)
-        |
-        v
-FastAPI / Node backend (Render)
-        |
-        +--> Stencil motor (CPU: kontúr -> top-hat -> bridge -> méret)
-        |
-        +--> AI API         (csak AI-generálás, ~0.02 USD/kép)
-        |
-        v
-Supabase (DB + auth)  +  Cloudflare R2 (fájlok)
+```bash
+cd web
+npm install
+npm run dev
 ```
 
-## Könyvtárak
+Majd nyisd meg: http://localhost:3000
 
-| Mappa | Tartalom |
-|---|---|
-| `docs/` | Architektúra, ütemterv |
-| `db/` | SQL migrációk (Supabase) |
-| `pipeline/` | A stencil motor (JS az éles, Python a port) |
-| `web/` | Next.js frontend (következő lépés) |
-| `api/` | Backend (következő lépés) |
+## A stencil motor
 
-## Állapot
+`pipeline/js/stencil-v3.js` — tiszta JavaScript, CPU-n fut, nincs függőség.
 
-- [x] Architektúra + DB séma
-- [x] Stencil motor (kétágú, tesztelve 3 valódi képen)
-- [x] 300 DPI nyomtatási kimenet (méret eltérés mérve: 0,0000 mm)
-- [ ] Web frontend
-- [ ] AI-átalakító lépés
-- [ ] Fizetés (Stripe)
-
-## A motor mért eredményei
+Kétágú: automatikusan méri a bemenetet és dönt.
 
 | Bemenet | Átlag | Élsűrűség | Ág | Fedettség |
 |---|---|---|---|---|
@@ -54,10 +29,23 @@ Supabase (DB + auth)  +  Cloudflare R2 (fájlok)
 | Streetwear figura | 90 | 16,4% | top-hat | 12,9% |
 | Szintetikus rajz | 240 | 2,1% | Otsu | ~10% |
 
-## Helyi futtatás
+## Nyomtatási pontosság
 
-```bash
-node pipeline/js/test/run.js
-```
+300 DPI, `px_per_mm = dpi / 25.4`. Mért eltérés **0,0000 mm** 100 mm szélességen.
 
-Nincs függőség, nincs telepítési lépés — a motor tiszta JavaScript, CPU-n fut.
+## Felépítés
+
+| Mappa | Tartalom |
+|---|---|
+| `pipeline/js/` | a stencil motor |
+| `pipeline/stencil.py` | Python port |
+| `web/` | Next.js frontend (a motor Web Workerben) |
+| `db/migrations/` | Supabase séma |
+| `docs/` | architektúra, ütemterv, állapot |
+
+## Élő működéshez
+
+1. **Vercel** → Settings → General → Root Directory → `web`
+2. **Supabase** → SQL editor → `db/migrations/001_init.sql` futtatása
+
+Részletek: `docs/STATUS-HU.md`

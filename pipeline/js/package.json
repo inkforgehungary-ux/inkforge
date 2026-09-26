@@ -1,0 +1,12 @@
+{
+  "name": "@inkforge/pipeline",
+  "version": "0.3.0",
+  "description": "InkForge stencil motor — képet nyomtatásra kész tattoo sablonná alakít",
+  "main": "stencil-v3.js",
+  "private": true,
+  "scripts": {
+    "test": "node test/run.js"
+  },
+  "dependencies": {},
+  "engines": { "node": ">=18" }
+}

@@ -199,13 +199,3 @@ export default function StencilTool({ t }) {
     </div>
   );
 }
-
-function Stat({ label, value, tone }) {
-  const color = tone === 'ok' ? 'text-emerald-400' : tone === 'warn' ? 'text-amber-400' : 'text-stone-200';
-  return (
-    <div className="rounded-lg border border-stone-800 px-3 py-2">
-      <div className="text-xs text-stone-500">{label}</div>
-      <div className={`mt-0.5 font-medium tabular-nums ${color}`}>{value}</div>
-    </div>
-  );
-}

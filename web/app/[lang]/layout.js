@@ -2,9 +2,6 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import Nav from '../../components/Nav';
 import { LOCALE_CODES, getDictionary, makeT, getDirection, getFontClass } from '../../lib/i18n/config';
-import '@fontsource/inter/400.css';
-import '@fontsource/inter/600.css';
-import '@fontsource/inter/700.css';
 import '../globals.css';
 
 export function generateStaticParams() {

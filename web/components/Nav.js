@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import LanguageSwitcher from './LanguageSwitcher';
+import AuthButton from './AuthButton';
 
 export default function Nav({ lang, t }) {
   const [open, setOpen] = useState(false);
@@ -10,7 +11,7 @@ export default function Nav({ lang, t }) {
   const items = [
     { href: `/${lang}/stencil`, label: t('nav.stencil') },
     { href: `/${lang}/piacter`, label: t('nav.marketplace') },
-    { href: `/${lang}/studiok`, label: t('nav.studios') },
+    { href: `/${lang}/studios`, label: t('nav.studios') },
     { href: `/${lang}/muveszek`, label: t('nav.artists') },
     { href: `/${lang}/forgalmazoknak`, label: t('nav.distributors') },
     { href: `/${lang}/kapcsolat`, label: t('nav.contact') },
@@ -18,13 +19,13 @@ export default function Nav({ lang, t }) {
 
   return (
     <nav className="sticky top-0 z-40 border-b border-stone-800 bg-stone-950/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-3">
+      <div className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-3">
         <Link href={`/${lang}`} className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/api/static/inkforge-logo.png" alt="InkForge" className="h-8 w-auto" />
         </Link>
 
-        <div className="ms-auto hidden items-center gap-1 md:flex">
+        <div className="ms-auto hidden items-center gap-1 lg:flex">
           {items.map((it) => (
             <Link
               key={it.href}
@@ -36,13 +37,14 @@ export default function Nav({ lang, t }) {
           ))}
         </div>
 
-        <div className="ms-auto md:ms-2">
+        <div className="ms-auto flex items-center gap-2 lg:ms-2">
+          <AuthButton label={t('nav.login')} />
           <LanguageSwitcher current={lang} label={t('common.lang')} />
         </div>
 
         <button
           onClick={() => setOpen((v) => !v)}
-          className="rounded-lg border border-stone-700 px-3 py-2 text-sm text-stone-300 md:hidden"
+          className="rounded-lg border border-stone-700 px-3 py-2 text-sm text-stone-300 lg:hidden"
           aria-label="Menu"
         >
           ☰
@@ -50,7 +52,7 @@ export default function Nav({ lang, t }) {
       </div>
 
       {open && (
-        <div className="border-t border-stone-800 bg-stone-950 md:hidden">
+        <div className="border-t border-stone-800 bg-stone-950 lg:hidden">
           {items.map((it) => (
             <Link
               key={it.href}
@@ -61,6 +63,10 @@ export default function Nav({ lang, t }) {
               {it.label}
             </Link>
           ))}
+          <Link href={`/${lang}/admin`} onClick={() => setOpen(false)}
+            className="block border-t border-stone-800 px-6 py-3 text-sm text-stone-500 transition hover:text-amber-400">
+            Admin
+          </Link>
         </div>
       )}
     </nav>

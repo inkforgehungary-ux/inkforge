@@ -2,12 +2,12 @@ export const metadata = {
   title: 'InkForge – Tattoo Stencil Platform',
   description:
     'Az otletedbol tiszta sablon. Feltoltott kepbol nyomtatasra kesz tattoo stencil, pontos mm-merettel.',
-  icons: { icon: '/favicon.png' },
+  icons: { icon: '/api/static/favicon.png' },
   openGraph: {
     title: 'InkForge – Tattoo Stencil Platform',
     description:
       'Az otletedbol tiszta sablon. Feltoltott kepbol nyomtatasra kesz tattoo stencil.',
-    images: [{ url: '/inkforge-opengraph.png', width: 1200, height: 630, alt: 'InkForge' }],
+    images: [{ url: '/api/static/inkforge-opengraph.png', width: 1200, height: 630, alt: 'InkForge' }],
     type: 'website',
     locale: 'hu_HU',
   },

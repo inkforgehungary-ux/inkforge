@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
 import Nav from '../../components/Nav';
 import { LOCALE_CODES, getDictionary, makeT, getDirection, getFontClass } from '../../lib/i18n/config';
 import '../globals.css';

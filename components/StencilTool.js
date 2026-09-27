@@ -14,7 +14,7 @@
 //   A bongeszo-motor csak VESZTARTALEK, es ki is irja.
 
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { runStencil, previewURL, maskToCanvas } from '../lib/stencil-client';
+import { maskToCanvas } from '../lib/stencil-client';
 import { canvasToPNGBytes, downloadBlob } from '../lib/png-browser';
 import { calculateA4Layout, mmToPx } from '../lib/print-layout';
 

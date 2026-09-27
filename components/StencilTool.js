@@ -1,6 +1,3 @@
-// INKFORGE — STENCIL FELULET
-// A motor bekotése: feltoltes, beallitasok, generalas, kimenet.
-
 'use client';
 
 import { useState, useCallback, useRef, useMemo } from 'react';
@@ -8,9 +5,9 @@ import { runStencil, previewURL, maskToDataURL } from '../lib/stencil-client';
 
 const BRANCHES = [
   { v: 'auto', label: 'Automatikus', hint: 'A motor megmeri a kepet es valaszt.' },
+  { v: 'edge', label: 'Foto / kontur', hint: 'Fotohoz: hatter-lelapitas + Canny kontur.' },
   { v: 'lineart', label: 'Vonalrajz', hint: 'Tusrajz, fekete vonal feher alapon.' },
-  { v: 'tonal', label: 'Tonalis', hint: 'Foto, arnyekos kep.' },
-  { v: 'edge', label: 'Korvonal', hint: 'Canny el — csak a kontur marad.' }
+  { v: 'tonal', label: 'Tonalis', hint: 'Foto, arnyekos kep — tomeges.' }
 ];
 
 const T = {
@@ -24,10 +21,53 @@ const T = {
     res: 'Eredmeny', empty: 'A kesz sablon itt jelenik meg.',
     size: 'Mert meret', raster: 'Raszter', pxmm: 'px / mm', branchUsed: 'Hasznalt ag',
     cov: 'Fedettseg', quality: 'Minoseg', br: 'Hidak', islands: 'Kulon darab', thr: 'Kuszob',
-    dlPng: 'PNG letoltese (at latszo)', newImg: 'Masik kep',
+    dlPng: 'PNG letoltese (atlatszo)', newImg: 'Masik kep',
     printNote: 'Nyomtatas 100%-os meretben — kapcsold ki a Fit to page opciot.',
     err: 'Hiba', errFile: 'Csak kepfajl.', stencil: 'Stencil', layerWord: 'reteg',
-    ready: 'A motor kesz.', processing: 'A motor dolgozik...'
+    kind: 'Kep fajta', polarity: 'Polaritas', ready: 'A motor kesz.'
+  },
+  en: {
+    drop: 'Drop the image here, or click', hint: 'PNG, JPG — a black-and-white drawing gives the best result',
+    settings: 'Settings', width: 'Width', dpi: 'Resolution', branch: 'Engine branch',
+    stroke: 'Stroke weight', bridge: 'Bridge thickness', polish: 'Edge smoothing',
+    minArea: 'Noise filter size', layers: 'Darkness levels', advanced: 'Advanced', basic: 'Basic',
+    fillHoles: 'Fill holes', reg: 'Registration marks',
+    go: 'Generate stencil', work: 'Processing...', analyzing: 'Analysing image...',
+    res: 'Result', empty: 'The finished stencil appears here.',
+    size: 'Measured size', raster: 'Raster', pxmm: 'px / mm', branchUsed: 'Branch used',
+    cov: 'Coverage', quality: 'Quality', br: 'Bridges', islands: 'Separate pieces', thr: 'Threshold',
+    dlPng: 'Download PNG (transparent)', newImg: 'Another image',
+    printNote: 'Print at 100% scale — turn off "Fit to page".',
+    err: 'Error', errFile: 'Image files only.', stencil: 'Stencil', layerWord: 'layer',
+    kind: 'Image type', polarity: 'Polarity', ready: 'The engine is ready.'
+  },
+  de: {
+    drop: 'Bild hierher ziehen oder klicken', hint: 'PNG, JPG',
+    settings: 'Einstellungen', width: 'Breite', dpi: 'Auflosung', branch: 'Motor-Zweig',
+    stroke: 'Linienbreite', bridge: 'Stegbreite', polish: 'Kantenglaettung',
+    minArea: 'Rauschfilter', layers: 'Helligkeitsstufen', advanced: 'Erweitert', basic: 'Basis',
+    fillHoles: 'Locher fullen', reg: 'Passkreuze',
+    go: 'Stencil erstellen', work: 'Verarbeitung...', analyzing: 'Bildanalyse...',
+    res: 'Ergebnis', empty: 'Die fertige Schablone erscheint hier.',
+    size: 'Gemessene Grosse', raster: 'Raster', pxmm: 'px / mm', branchUsed: 'Verwendeter Zweig',
+    cov: 'Deckung', quality: 'Qualitat', br: 'Stege', islands: 'Einzelteile', thr: 'Schwelle',
+    dlPng: 'PNG herunterladen (transparent)', newImg: 'Anderes Bild',
+    printNote: 'Bei 100% drucken.', err: 'Fehler', errFile: 'Nur Bilddateien.',
+    stencil: 'Stencil', layerWord: 'Ebene', kind: 'Bildtyp', polarity: 'Polaritat', ready: 'Der Motor ist bereit.'
+  },
+  pl: {
+    drop: 'Przeciagnij obraz tutaj lub kliknij', hint: 'PNG, JPG',
+    settings: 'Ustawienia', width: 'Szerokosc', dpi: 'Rozdzielczosc', branch: 'Galaz silnika',
+    stroke: 'Grubosc linii', bridge: 'Grubosc mostkow', polish: 'Wygadzanie krawedzi',
+    minArea: 'Filtr szumu', layers: 'Poziomy ciemnosci', advanced: 'Zaawansowane', basic: 'Podstawowe',
+    fillHoles: 'Wypelnij dziury', reg: 'Znaczniki pasowania',
+    go: 'Utworz szablon', work: 'Przetwarzanie...', analyzing: 'Analiza obrazu...',
+    res: 'Wynik', empty: 'Gotowy szablon pojawi sie tutaj.',
+    size: 'Zmierzony rozmiar', raster: 'Raster', pxmm: 'px / mm', branchUsed: 'Uzyta galaz',
+    cov: 'Pokrycie', quality: 'Jakosc', br: 'Mostki', islands: 'Osobne czesci', thr: 'Prog',
+    dlPng: 'Pobierz PNG (przezroczysty)', newImg: 'Inny obraz',
+    printNote: 'Drukuj w skali 100%.', err: 'Blad', errFile: 'Tylko pliki obrazow.',
+    stencil: 'Szablon', layerWord: 'warstwa', kind: 'Typ obrazu', polarity: 'Polaryzacja', ready: 'Silnik gotowy.'
   }
 };
 
@@ -49,8 +89,8 @@ export default function StencilTool({ lang }) {
   const [dpi, setDpi] = useState(300);
   const [branch, setBranch] = useState('auto');
   const [baseStroke, setBaseStroke] = useState(1);
-  const [bridgePx, setBridgePx] = useState(3);
-  const [minArea, setMinArea] = useState(20);
+  const [bridgePx, setBridgePx] = useState(2);
+  const [minArea, setMinArea] = useState(0);
   const [polish, setPolish] = useState(1);
   const [fillHoles, setFillHoles] = useState(false);
   const [registration, setRegistration] = useState(true);
@@ -174,7 +214,7 @@ export default function StencilTool({ lang }) {
                 <Slider label={t.stroke} value={baseStroke} unit="px" min={0} max={4} step={1} onChange={setBaseStroke} />
                 <Slider label={t.bridge} value={bridgePx} unit="px" min={1} max={9} step={1} onChange={setBridgePx} />
                 <Slider label={t.polish} value={polish} unit="" min={0} max={3} step={1} onChange={setPolish} />
-                <Slider label={t.minArea} value={minArea} unit="px" min={0} max={200} step={10} onChange={setMinArea} />
+                <Slider label={t.minArea} value={minArea} unit="px" min={0} max={400} step={20} onChange={setMinArea} />
                 <Slider label={t.layers} value={layers} unit="reteg" min={1} max={5} step={1} onChange={setLayers} />
                 <div className="flex flex-wrap gap-5">
                   <Toggle label={t.fillHoles} on={fillHoles} set={setFillHoles} />
@@ -246,6 +286,8 @@ export default function StencilTool({ lang }) {
               <Stat label={t.br} value={String(r.bridges)} />
               <Stat label={t.branchUsed} value={r.branchUsed} />
               <Stat label={t.islands} value={String(r.islands)} tone={r.islands > 1 ? 'warn' : 'ok'} />
+              <Stat label={t.kind} value={r.kind || '-'} />
+              <Stat label={t.polarity} value={r.polarity || '-'} />
               <Stat label={t.thr} value={r.threshold < 0 ? '-' : String(r.threshold)} />
             </div>
 
@@ -257,8 +299,7 @@ export default function StencilTool({ lang }) {
             <button
               onClick={function () {
                 const a = document.createElement('a');
-                const url = maskToDataURL(result.mask, result.width, result.height);
-                a.href = url;
+                a.href = maskToDataURL(result.mask, result.width, result.height);
                 a.download = 'inkforge-stencil-' + p.widthMm + 'mm-' + p.dpi + 'dpi.png';
                 a.click();
               }}

@@ -94,7 +94,8 @@ export async function POST(req) {
     }
     if (!imageB64) return Response.json({ ok: false, error: 'Hiányzik a feltöltött kép.' }, { status: 400 });
 
-    const widthMm = Math.max(20, Math.min(400, parseFloat(body.width_mm || '100')));
+    const widthMm = Math.max(20, Math.min(700, parseFloat(body.width_mm || '100')));
+    const heightMm = Math.max(20, Math.min(1000, parseFloat(body.height_mm || widthMm)));
     const dpi = [150, 300, 600].includes(parseInt(body.dpi || '300', 10))
       ? parseInt(body.dpi || '300', 10) : 300;
     const title = String(body.title || 'stencil').slice(0, 80);
@@ -103,7 +104,7 @@ export async function POST(req) {
 
     const created = await sbInsert('stencils', stencilInsertRow({
       userId, studioId, title, sourceType: 'upload',
-      widthMm, dpi
+      widthMm, heightMm, dpi
     }));
     const stencilId = created ? created.id : null;
 
@@ -111,7 +112,9 @@ export async function POST(req) {
       mode,
       image_base64: imageB64,
       prompt: body.prompt || 'preserve the source subject; clean tattoo stencil line art',
-      max_side: Math.max(512, Math.min(1024, parseInt(body.max_side || '768', 10))),
+      max_side: Math.max(512, Math.min(1024, parseInt(body.max_side || '1024', 10))),
+      target_width_mm: widthMm,
+      target_height_mm: heightMm,
       steps: Math.max(8, Math.min(40, parseInt(body.steps || '22', 10))),
       strength: Math.max(0.15, Math.min(0.85, parseFloat(body.strength || '0.38'))),
       return_generated: true
@@ -125,7 +128,7 @@ export async function POST(req) {
       ok: true,
       runpodId: start.id,
       runpodStatus: start.status || 'IN_QUEUE',
-      stencilId, studioId, userId, title, widthMm, dpi, mode
+      stencilId, studioId, userId, title, widthMm, heightMm, dpi, mode
     });
   } catch (e) {
     return Response.json({
@@ -141,6 +144,7 @@ export async function GET(req) {
   const stencilId = u.searchParams.get('stencil');
   const studioId = u.searchParams.get('studio');
   const widthMm = Math.max(20, parseFloat(u.searchParams.get('mm') || '100'));
+  const requestedHeightMm = parseFloat(u.searchParams.get('hmm') || '');
   const dpi = parseInt(u.searchParams.get('dpi') || '300', 10);
 
   if (!id) return Response.json({ ok: false, error: 'Hiányzó RunPod id.' }, { status: 400 });
@@ -178,7 +182,9 @@ export async function GET(req) {
 
     const width = Number(output.width || 768);
     const height = Number(output.height || 768);
-    const heightMm = Math.round(widthMm * height / Math.max(1, width) * 100) / 100;
+    const heightMm = Number.isFinite(requestedHeightMm) && requestedHeightMm > 0
+      ? Math.round(requestedHeightMm * 100) / 100
+      : Math.round(widthMm * height / Math.max(1, width) * 100) / 100;
     const gpuMs = Number(output.gpu_ms || output.executionTime || 0);
 
     let transitioned = null;

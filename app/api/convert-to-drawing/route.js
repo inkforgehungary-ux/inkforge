@@ -33,11 +33,13 @@ export async function POST(req) {
     const ct = req.headers.get('content-type') || '';
     let imageB64 = null;
     let prompt = DRAWING_PROMPT;
+    let style = 'line';
 
     if (ct.includes('application/json')) {
       const body = await req.json();
       imageB64 = body.image_base64 || null;
       if (body.prompt) prompt = String(body.prompt);
+      if (body.style === 'stencil') style = 'stencil';
     } else {
       const form = await req.formData();
       const f = form.get('image');
@@ -47,6 +49,7 @@ export async function POST(req) {
       if (form.get('prompt')) {
         prompt = String(form.get('prompt'));
       }
+      if (form.get('style') === 'stencil') style = 'stencil';
     }
 
     if (!imageB64) {
@@ -57,6 +60,7 @@ export async function POST(req) {
       mode: 'image_to_drawing',
       image_base64: imageB64,
       prompt,
+      style,
       negative: DRAWING_NEGATIVE,
       max_side: 1024,
       steps: 1,
@@ -67,7 +71,8 @@ export async function POST(req) {
     return Response.json({
       ok: true,
       runpodId: start.id,
-      runpodStatus: start.status || 'IN_QUEUE'
+      runpodStatus: start.status || 'IN_QUEUE',
+      style
     });
   } catch (e) {
     return Response.json({
@@ -116,6 +121,7 @@ export async function GET(req) {
       height: out.height || null,
       gpuMs: Number(out.gpu_ms || out.executionTime || 0),
       engine: out.engine || 'InkForge RunPod',
+      style: out.style || 'line',
       model: out.model || 'DexiNed + HED',
       coverage: Number(out.coverage || 0),
       islands: Number(out.islands || 0),

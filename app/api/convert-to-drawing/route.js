@@ -56,7 +56,7 @@ export async function POST(req) {
     const start = await runpodRun({
       mode: 'image_to_drawing',
       image_base64: imageB64,
-      prompt: 'thin pencil contour drawing, essential lines only, clean single subject',
+      prompt,
       negative: DRAWING_NEGATIVE,
       max_side: 1024,
       steps: 1,
@@ -115,7 +115,12 @@ export async function GET(req) {
       width: out.width || null,
       height: out.height || null,
       gpuMs: Number(out.gpu_ms || out.executionTime || 0),
-      engine: out.engine || 'InkForge RunPod'
+      engine: out.engine || 'InkForge RunPod',
+      model: out.model || 'DexiNed + HED',
+      coverage: Number(out.coverage || 0),
+      islands: Number(out.islands || 0),
+      quality: out.quality || null,
+      verdictText: out.verdictText || null
     });
   } catch (e) {
     return Response.json({ ok: true, ready: false, status: 'RETRY' }, { status: 202 });

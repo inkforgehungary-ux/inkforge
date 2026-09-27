@@ -184,7 +184,7 @@ export default function StencilTool({ lang }) {
     if (out.widthMm) qs.set('mm', out.widthMm);
     if (out.dpi) qs.set('dpi', out.dpi);
 
-    for (let i = 0; i < 180; i++) {
+    for (let i = 0; i < 300; i++) {
       await new Promise(function (r) { setTimeout(r, 2000); });
       const s = await fetch(route + '?' + qs.toString());
       const sj = await s.json().catch(function () { return {}; });

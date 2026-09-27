@@ -110,9 +110,8 @@ export default function StencilTool({ lang }) {
       const ratio = (img.naturalHeight || img.height || 1) / Math.max(1, img.naturalWidth || img.width || 1);
       setSourceAspect(ratio);
       if (lockAspect) setHeightMm(Math.round(widthMm * ratio * 10) / 10);
-      URL.revokeObjectURL(objectUrl);
     };
-    img.onerror = function () { URL.revokeObjectURL(objectUrl); };
+    img.onerror = function () { setError('A kép mérete nem olvasható.'); };
     img.src = objectUrl;
   }, [lockAspect, widthMm]);
 
@@ -196,7 +195,7 @@ export default function StencilTool({ lang }) {
       },
       print: {
         widthMm: widthMm,
-        heightMm: heightMm,
+        heightMm: effectiveHeightMm,
         pxPerMm: Math.round(pxPerMm * 100) / 100,
         dpi: dpi,
         px: w + ' x ' + h
@@ -455,7 +454,7 @@ export default function StencilTool({ lang }) {
 
   async function downloadA4Package() {
     if (!result || result.isStencil === false) return;
-    const layout = calculateA4Layout(p.widthMm, p.heightMm, { orientation: 'auto', marginMm: 5, overlapMm: 8 });
+    const layout = calculateA4Layout(p.widthMm, p.heightMm, { orientation: 'auto', marginMm: 3, overlapMm: 3 });
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     const safeTitle = (title || 'stencil').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase() || 'stencil';

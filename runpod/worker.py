@@ -20,7 +20,7 @@ from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from dexined_model import DexiNed
 
-ENGINE_VERSION = "3.2.0"
+ENGINE_VERSION = "3.3.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
 DEFAULT_SIZE = int(os.getenv("RUNPOD_DEFAULT_SIZE", "768"))
 DEFAULT_STEPS = int(os.getenv("RUNPOD_DEFAULT_STEPS", "22"))
@@ -344,40 +344,57 @@ def _professional_line_drawing(pil: Image.Image) -> np.ndarray:
 
 
 def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndarray:
-    """DexiNed + HED tattoo line art with separate drawing/stencil profiles."""
+    """DexiNed + HED tattoo drawing profiles.
+
+    Profiles are InkForge implementations targeting common professional
+    stencil characteristics; they do not reproduce any proprietary service.
+    """
+    style = str(style or "line").strip().lower()
+    if style not in ("line", "stencil", "hatching", "bold", "soft"):
+        style = "line"
+
     rgb = np.array(pil.convert("RGB"))
     h, w = rgb.shape[:2]
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    gray = cv2.createCLAHE(
-        clipLimit=1.5 if style == "line" else 1.9,
-        tileGridSize=(8, 8)
-    ).apply(gray)
-    gray = cv2.bilateralFilter(gray, 7, 28 if style == "line" else 35, 28 if style == "line" else 35)
+
+    clip = 1.5 if style in ("line", "soft") else 1.9
+    sigma = 28 if style in ("line", "soft") else 35
+    gray = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8)).apply(gray)
+    gray = cv2.bilateralFilter(gray, 7, sigma, sigma)
 
     dexi = _dexined_edges(pil)
     hed = _hed_edges(pil)
     score = (0.72 * dexi) + (0.28 * hed)
 
-    # Line mode keeps fewer, cleaner structural contours.
-    # Stencil mode retains a controlled amount of additional tattoo detail.
-    percentile = 78.0 if style == "line" else 69.0
-    min_threshold = 0.30 if style == "line" else 0.23
-    max_threshold = 0.52 if style == "line" else 0.45
-    threshold = float(np.clip(np.percentile(score, percentile), min_threshold, max_threshold))
+    profiles = {
+        "line":    (80.0, 0.31, 0.54, 78, 158, 0.085, 0.000010, 0.10, 26),
+        "soft":    (84.0, 0.34, 0.57, 82, 165, 0.110, 0.000012, 0.08, 30),
+        "stencil": (69.0, 0.23, 0.45, 60, 140, 0.045, 0.000007, 0.14, 18),
+        "hatching":(66.0, 0.22, 0.44, 58, 138, 0.040, 0.000007, 0.16, 16),
+        "bold":    (73.0, 0.26, 0.48, 62, 145, 0.055, 0.000008, 0.16, 18),
+    }
+    percentile, min_threshold, max_threshold, grad_low, grad_high, detail_delta, min_area_ratio, max_area_ratio, min_length = profiles[style]
 
+    threshold = float(np.clip(
+        np.percentile(score, percentile),
+        min_threshold,
+        max_threshold
+    ))
     strong = (score >= threshold).astype(np.uint8) * 255
 
-    grad_low = 75 if style == "line" else 60
-    grad_high = 155 if style == "line" else 140
     grad = cv2.Canny(gray, grad_low, grad_high, apertureSize=3, L2gradient=True)
-
-    detail_threshold = max(0.44, threshold + (0.08 if style == "line" else 0.045))
+    detail_threshold = max(0.44, threshold + detail_delta)
     detail = ((score >= detail_threshold).astype(np.uint8) * 255)
-    supported_detail = cv2.bitwise_and(detail, grad)
-    mask = cv2.bitwise_or(strong, supported_detail)
 
-    # Stencil mode gets a tiny closing pass so transfer lines don't break.
-    if style == "stencil":
+    # Soft outline deliberately drops most fine-detail recovery.
+    if style == "soft":
+        detail = cv2.bitwise_and(detail, cv2.erode(grad, np.ones((2, 2), np.uint8)))
+    else:
+        detail = cv2.bitwise_and(detail, grad)
+
+    mask = cv2.bitwise_or(strong, detail)
+
+    if style in ("stencil", "hatching", "bold"):
         mask = cv2.morphologyEx(
             mask, cv2.MORPH_CLOSE,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
@@ -386,42 +403,55 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
     mask = _thin_mask(mask)
     mask = _remove_border_components(mask)
 
-    # Standard tattoo-stencil profile: add sparse, luminance-guided
-    # engraving/hatching only inside darker tonal regions. This avoids
-    # solid fills while retaining the depth visible in professional
-    # realism stencils.
-    if style == "stencil":
-        tone = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-        tone = cv2.GaussianBlur(tone, (9, 9), 0)
-        dark = (tone < np.percentile(tone, 48)).astype(np.uint8) * 255
+    # Standard / Hatching profiles add sparse luminance-guided engraving.
+    if style in ("stencil", "hatching"):
+        tone = cv2.GaussianBlur(
+            cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY),
+            (9, 9),
+            0
+        )
+        dark_percentile = 48 if style == "stencil" else 56
+        dark = (tone < np.percentile(tone, dark_percentile)).astype(np.uint8) * 255
         dark = cv2.morphologyEx(
             dark, cv2.MORPH_OPEN,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         )
         hatch = np.zeros_like(mask)
-        spacing = max(7, int(round(min(h, w) / 110)))
+        spacing = max(
+            6 if style == "hatching" else 8,
+            int(round(min(h, w) / (92 if style == "hatching" else 110)))
+        )
         for offset in range(-h, w, spacing):
             p1 = (max(offset, 0), max(-offset, 0))
             p2 = (min(w - 1, offset + h), min(h - 1, h + offset))
             cv2.line(hatch, p1, p2, 255, 1, cv2.LINE_AA)
         hatch = cv2.bitwise_and(hatch, dark)
-        # Keep hatching subordinate to the semantic contours.
-        hatch = cv2.bitwise_and(hatch, cv2.dilate(mask, np.ones((3, 3), np.uint8)))
+        hatch = cv2.bitwise_and(
+            hatch,
+            cv2.dilate(mask, np.ones((3 if style == "hatching" else 2, 3 if style == "hatching" else 2), np.uint8))
+        )
         mask = cv2.bitwise_or(mask, hatch)
         mask = _thin_mask(mask)
 
+    # Bold profile is still line art: thicken only after semantic filtering.
+    if style == "bold":
+        mask = cv2.dilate(
+            mask,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)),
+            iterations=1
+        )
+
     num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     out = np.zeros_like(mask)
-    min_area = max(10, int(h * w * (0.000010 if style == "line" else 0.000007)))
-    max_area = int(h * w * (0.10 if style == "line" else 0.14))
+    min_area = max(10, int(h * w * min_area_ratio))
 
     for idx in range(1, num):
         area = int(stats[idx, cv2.CC_STAT_AREA])
         bw = int(stats[idx, cv2.CC_STAT_WIDTH])
         bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
-        min_length = 24 if style == "line" else 18
-        if min_area <= area <= max_area and (max(bw, bh) >= min_length or area >= 24):
-            out[labels == idx] = 255
+        if min_area <= area <= int(h * w * max_area_ratio):
+            if max(bw, bh) >= min_length or area >= 24:
+                out[labels == idx] = 255
 
     return out
 
@@ -589,9 +619,21 @@ def handler(job: dict):
 
     if mode == "image_to_drawing":
         drawing_style = str(inp.get("style") or "line").strip().lower()
-        if drawing_style not in ("line", "stencil"):
+        if drawing_style not in ("line", "stencil", "hatching", "bold", "soft"):
             drawing_style = "line"
         mask = _professional_line_drawing(source, drawing_style)
+
+        # Optional 4K export is a raster enlargement of the final clean mask.
+        # It does not claim to add neural detail; the learned edge extraction
+        # happens before this export step.
+        output_max_side = int(inp.get("output_max_side") or max(mask.shape))
+        output_max_side = max(512, min(4096, output_max_side))
+        if output_max_side > max(mask.shape):
+            scale = output_max_side / float(max(mask.shape))
+            ow = max(64, int(round(mask.shape[1] * scale)))
+            oh = max(64, int(round(mask.shape[0] * scale)))
+            mask = cv2.resize(mask, (ow, oh), interpolation=cv2.INTER_NEAREST)
+
         coverage, islands, quality, verdict = _metrics(mask)
         stencil_b64 = _mask_png(mask)
         return {

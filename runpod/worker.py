@@ -230,6 +230,7 @@ def _load_dexined():
     if not os.path.exists(checkpoint):
         raise RuntimeError("A DexiNed checkpoint nem található.")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    _free_pipes()
     print("[InkForge] Loading DexiNed edge model")
     model = DexiNed().to(device)
     state = torch.load(checkpoint, map_location=device)

@@ -1,36 +1,24 @@
-// INKFORGE — ENGINE HEALTH
-// Utvonal: app/api/stencil/health/route.js -> ../../../../lib/
-// GET /api/stencil/health — melyik motor el?
+// INKFORGE — ENGINE HEALTH (diagnosztika)
+// GET /api/stencil/health — reszletes allapot, hogy latszik-e, hol akad el
 
 export async function GET() {
   const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
   const textUrl = process.env.RUNPOD_TEXT_URL || process.env.RUNPOD_STENCIL_URL || null;
-  const hasKey = !!process.env.RUNPOD_API_KEY;
+  const key = process.env.RUNPOD_API_KEY || '';
+  const hasKey = !!key;
   const sbUrl = process.env.SUPABASE_URL || null;
   const sbKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  let runpod = null;
-  if (stencilUrl && hasKey) {
-    try {
-      const r = await fetch(stencilUrl.replace(/\/+$/, '') + '/health', {
-        headers: { 'Authorization': 'Bearer ' + process.env.RUNPOD_API_KEY },
-        signal: AbortSignal.timeout(8000)
-      });
-      runpod = await r.json().catch(function () { return { ok: false, error: 'JSON hiba' }; });
-    } catch (e) {
-      runpod = { ok: false, error: String(e && e.message ? e.message : e) };
-    }
-  }
-
-  return Response.json({
+  const out = {
     ok: true,
-    engine: '2.1.0',
+    engine: '2.2.0',
     runpod: {
       configured: !!(stencilUrl && hasKey),
       stencil_url: stencilUrl,
       text_url: textUrl,
       has_api_key: hasKey,
-      live: runpod
+      key_prefix: key ? key.slice(0, 6) + '...' : null,
+      checks: {}
     },
     supabase: {
       configured: !!(sbUrl && sbKey),
@@ -38,5 +26,33 @@ export async function GET() {
       has_service_key: sbKey
     },
     mode: (stencilUrl && hasKey) ? 'runpod' : 'browser'
-  });
+  };
+
+  if (!stencilUrl || !hasKey) return Response.json(out);
+
+  const base = stencilUrl.replace(/\/+$/, '');
+  const H = { 'Authorization': 'Bearer ' + key };
+
+  try {
+    const r = await fetch(base + '/health', { headers: H, signal: AbortSignal.timeout(10000) });
+    const t = await r.text();
+    out.runpod.checks.health = { status: r.status, ok: r.ok, body: t.slice(0, 300) };
+  } catch (e) {
+    out.runpod.checks.health = { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+
+  try {
+    const r = await fetch(base + '/runsync', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, H),
+      body: JSON.stringify({ input: {} }),
+      signal: AbortSignal.timeout(15000)
+    });
+    const t = await r.text();
+    out.runpod.checks.runsync = { status: r.status, ok: r.ok, body: t.slice(0, 400) };
+  } catch (e) {
+    out.runpod.checks.runsync = { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+
+  return Response.json(out);
 }

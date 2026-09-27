@@ -38,7 +38,8 @@ export async function POST(req) {
     const description=String(body.description||'').trim();
     if(description.length<4)return Response.json({ok:false,error:'Írd le, mit ábrázoljon.'},{status:400});
 
-    const widthMm=Math.max(20,Math.min(400,parseFloat(body.width_mm||'100')));
+    const widthMm=Math.max(20,Math.min(700,parseFloat(body.width_mm||'100')));
+    const heightMm=Math.max(20,Math.min(1000,parseFloat(body.height_mm||widthMm)));
     const dpi=[150,300,600].includes(parseInt(body.dpi||'300',10))?parseInt(body.dpi||'300',10):300;
     const bodyPart=body.body_part||null;
     const styleSlug=body.style_slug||'linework';
@@ -47,7 +48,7 @@ export async function POST(req) {
 
     const created=await sbInsert('stencils',stencilInsertRow({
       userId:body.user_id||null,studioId:body.studio_id||null,title,sourceType:'ai',
-      sourcePrompt:built.prompt,widthMm,dpi
+      sourcePrompt:built.prompt,widthMm,heightMm,dpi
     }));
     const stencilId=created?created.id:null;
 
@@ -56,8 +57,10 @@ export async function POST(req) {
       mode:mode,
       prompt:built.prompt,
       negative:built.negative,
-      max_side:768,
-      steps:22,
+      max_side:1024,
+      target_width_mm:widthMm,
+      target_height_mm:heightMm,
+      steps:24,
       guidance:5.5,
       return_generated:true
     }, { text: true });
@@ -67,7 +70,7 @@ export async function POST(req) {
     return Response.json({
       ok:true,runpodId:start.id,runpodStatus:start.status||'IN_QUEUE',
       stencilId,studioId:body.studio_id||null,userId:body.user_id||null,
-      widthMm,dpi,title,prompt:built.prompt,embeddedText:built.embeddedText,style:styleSlug
+      widthMm,heightMm,dpi,title,prompt:built.prompt,embeddedText:built.embeddedText,style:styleSlug
     });
   }catch(e){
     return Response.json({ok:false,error:String(e&&e.message?e.message:e)},{status:500});
@@ -80,6 +83,7 @@ export async function GET(req) {
   const stencilId=u.searchParams.get('stencil');
   const studioId=u.searchParams.get('studio');
   const widthMm=Math.max(20,parseFloat(u.searchParams.get('mm')||'100'));
+  const requestedHeightMm=parseFloat(u.searchParams.get('hmm')||'');
   const dpi=parseInt(u.searchParams.get('dpi')||'300',10);
   if(!id)return Response.json({ok:false,error:'Hiányzó RunPod id.'},{status:400});
 
@@ -99,7 +103,9 @@ export async function GET(req) {
     if(!b64)return Response.json({ok:true,ready:true,failed:true,error:'A worker kész, de nem adott képet.'});
 
     const width=Number(out.width||768),height=Number(out.height||768);
-    const heightMm=Math.round(widthMm*height/Math.max(1,width)*100)/100;
+    const heightMm=Number.isFinite(requestedHeightMm)&&requestedHeightMm>0
+      ? Math.round(requestedHeightMm*100)/100
+      : Math.round(widthMm*height/Math.max(1,width)*100)/100;
     const gpuMs=Number(out.gpu_ms||out.executionTime||0);
     let transitioned=null;
     if(stencilId)transitioned=await sbPatch('stencils',stencilId,stencilUpdateRow({

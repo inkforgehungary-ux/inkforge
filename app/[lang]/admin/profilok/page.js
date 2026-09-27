@@ -1,9 +1,15 @@
 import { T } from '../../../_shared';
 
 export default function Page({ params }) {
+  const lang = params.lang;
+  const t = T(lang);
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">Profilok</h1>
-    </main>
+    <div lang={lang}>
+      <main className="mx-auto max-w-6xl px-6 py-12">
+        <a href={'/' + lang + '/admin'} className="text-sm text-stone-500 hover:text-amber-400">{t.back}</a>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">Profilok</h1>
+        <p className="mt-6 text-sm text-stone-500">{t.adminNote}</p>
+      </main>
+    </div>
   );
 }

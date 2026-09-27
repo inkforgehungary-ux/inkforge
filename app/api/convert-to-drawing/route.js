@@ -2,7 +2,7 @@
 // POST /api/convert-to-drawing -> RunPod image_to_drawing
 // GET  /api/convert-to-drawing?id=... -> RunPod status + generated PNG
 
-import { runpodReady, runpodRun, runpodStatus, extractRunpodOutput } from '../../../../lib/runpod-client.js';
+import { runpodReady, runpodRun, runpodStatus, extractRunpodOutput } from '../../../lib/runpod-client.js';
 
 function toBase64(bytes) {
   return Buffer.from(bytes).toString('base64');

@@ -9,7 +9,7 @@ export const viewport = {
   initialScale: 1,
 };
 
-import '../globals.css';
+import './globals.css';
 
 export default function RootLayout({ children }) {
   return (

@@ -1,18 +1,20 @@
-import { getDictionary, makeT } from '../../../lib/i18n/config';
-import AdminNav from '../../../components/AdminNav';
-import AdminDistributors from '../../../components/AdminDistributors';
+import LocaleShell from '../../../../components/LocaleShell';
+import AdminNav from '../../../../components/AdminNav';
+import AdminGate from '../../../../components/AdminGate';
+import AdminDistributors from '../../../../components/AdminDistributors';
 
-export function generateMetadata() {
-  return { title: 'Forgalmazok – Admin · InkForge' };
-}
+export const metadata = { title: 'Forgalmazok – Admin' };
 
-export default function AdminDistributorsPage({ params }) {
-  const t = makeT(getDictionary(params.lang));
+export default function Page({ params }) {
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">Forgalmazok</h1>
-      <AdminNav lang={params.lang} active="forgalmazok" />
-      <AdminDistributors />
-    </main>
+    <LocaleShell lang={params.lang}>
+      <main className="mx-auto max-w-6xl px-6 py-12">
+        <h1 className="text-2xl font-semibold tracking-tight">Forgalmazok</h1>
+        <AdminGate lang={params.lang}>
+          <AdminNav lang={params.lang} active="forgalmazok" />
+          <AdminDistributors />
+        </AdminGate>
+      </main>
+    </LocaleShell>
   );
 }

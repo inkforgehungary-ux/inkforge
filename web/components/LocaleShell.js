@@ -1,23 +1,16 @@
 import { getDictionary, makeT, getFontClass } from '../lib/i18n/config';
-import Nav from '../components/Nav';
-import HomeContent from '../components/HomeContent';
+import Nav from './Nav';
+import HomeContent from './HomeContent';
 
-export const metadata = {
-  title: 'InkForge – Tattoo Stencil Platform | B2B',
-  description: 'Raktar nelkuli B2B stencil platform tetovalostudioknak.',
-};
-
-// A GYOKER oldal: kozvetlenul megjeleniti a magyar fooldalt.
-// Nincs redirect — igy nem fugg az atiranyitas mukodesetol.
-export default function RootPage() {
-  const lang = 'hu';
+export default function LocaleShell({ lang, children }) {
   const t = makeT(getDictionary(lang));
   const fontClass = getFontClass(lang);
+  const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
 
   return (
-    <div className={fontClass} dir="ltr" lang={lang}>
+    <div className={fontClass} dir={dir} lang={lang}>
       <Nav lang={lang} t={t} />
-      <HomeContent t={t} lang={lang} />
+      {children}
       <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
           <span>InkForge · Tattoo Stencil Platform · B2B</span>

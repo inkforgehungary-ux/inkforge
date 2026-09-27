@@ -1,5 +1,5 @@
-import { ONE_OFF_GENERATIONS, SUBSCRIPTION_PLANS } from '../../../../lib/pricing';
-import CheckoutButton from '../../../../components/CheckoutButton';
+import { ONE_OFF_GENERATIONS, SUBSCRIPTION_PLANS } from '../../../lib/pricing';
+import CheckoutButton from '../../../components/CheckoutButton';
 
 export default function PricingPage({ params }) {
   const lang = (params && params.lang) || 'hu';

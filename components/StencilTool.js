@@ -72,6 +72,8 @@ export default function StencilTool({ lang }) {
   const [styleSlug, setStyleSlug] = useState('linework');
   const [bodyPart, setBodyPart] = useState('');
   const [title, setTitle] = useState('');
+  const [imageMode, setImageMode] = useState('image_to_image_stencil');
+  const [imagePrompt, setImagePrompt] = useState('');
 
   const onPick = useCallback(function (f) {
     if (!f) return;
@@ -97,59 +99,119 @@ export default function StencilTool({ lang }) {
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const blob = new Blob([bytes], { type: 'image/png' });
-    setPreview(URL.createObjectURL(blob));
+    const previewSrc = URL.createObjectURL(blob);
 
-    const f = new File([blob], 'runpod-stencil.png', { type: 'image/png' });
-    const res = await runStencil(f, {
-      widthMm: widthMm, dpi: dpi, branch: 'edge',
-      baseStroke: 0, bridgePx: 2, minArea: 20, polish: 0,
-      fillHoles: false, registration: true, layers: 1, maxDim: 3000
+    const img = new Image();
+    const loaded = new Promise(function (resolve, reject) {
+      img.onload = resolve;
+      img.onerror = function () { reject(new Error('A RunPod PNG nem olvasható.')); };
     });
-    setResult(Object.assign({}, res, {
-      url: previewURL(res.mask, res.width, res.height, 1100)
-    }, extra || {}));
+    img.src = previewSrc;
+    await loaded;
+
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const rgba = ctx.getImageData(0, 0, w, h).data;
+    const mask = new Uint8Array(w * h);
+    let ink = 0;
+    for (let i = 0; i < w * h; i++) {
+      const a = rgba[i * 4 + 3];
+      const v = (rgba[i * 4] + rgba[i * 4 + 1] + rgba[i * 4 + 2]) / 3;
+      if (a > 20 && v < 245) { mask[i] = 255; ink++; }
+    }
+
+    const coverage = extra && extra.coverage != null
+      ? Number(extra.coverage)
+      : Math.round((ink / Math.max(1, mask.length)) * 10000) / 100;
+    const heightMm = extra && extra.heightMm != null
+      ? Number(extra.heightMm)
+      : Math.round(widthMm * h / Math.max(1, w) * 100) / 100;
+    const pxPerMm = dpi / 25.4;
+
+    let generatedUrl = null;
+    if (extra && extra.generated_png_base64) {
+      const gbin = atob(extra.generated_png_base64);
+      const gbytes = new Uint8Array(gbin.length);
+      for (let i = 0; i < gbin.length; i++) gbytes[i] = gbin.charCodeAt(i);
+      generatedUrl = URL.createObjectURL(new Blob([gbytes], { type: 'image/png' }));
+    }
+
+    setPreview(previewSrc);
+    setResult({
+      mask: mask,
+      width: w,
+      height: h,
+      url: previewSrc,
+      generatedUrl: generatedUrl,
+      report: {
+        branchUsed: extra && extra.mode ? extra.mode : 'runpod',
+        bridges: extra && extra.bridges != null ? extra.bridges : 0,
+        islands: extra && extra.islands != null ? extra.islands : 1,
+        coverage: coverage,
+        quality: extra && extra.quality ? extra.quality : 'hasznalhato',
+        verdictText: extra && extra.verdictText ? extra.verdictText : 'Éles, nyomtatható stencil-vonalrajz.'
+      },
+      print: {
+        widthMm: widthMm,
+        heightMm: heightMm,
+        pxPerMm: Math.round(pxPerMm * 100) / 100,
+        dpi: dpi,
+        px: w + ' x ' + h
+      },
+      gpu: {
+        ms: extra && (extra.gpuMs || extra.executionMs) || 0,
+        engine: extra && (extra.engine || 'InkForge RunPod')
+      },
+      gpuCoverage: coverage,
+      prompt: extra && extra.prompt ? extra.prompt : null
+    });
+  }
+
+  async function waitRunpod(route, out) {
+    const id = out.runpodId || out.jobId;
+    if (!id) throw new Error('A RunPod nem adott job azonosítót.');
+
+    const qs = new URLSearchParams();
+    qs.set('id', id);
+    if (out.stencilId) qs.set('stencil', out.stencilId);
+    if (out.studioId) qs.set('studio', out.studioId);
+    if (out.widthMm) qs.set('mm', out.widthMm);
+    if (out.dpi) qs.set('dpi', out.dpi);
+
+    for (let i = 0; i < 180; i++) {
+      await new Promise(function (r) { setTimeout(r, 2000); });
+      const s = await fetch(route + '?' + qs.toString());
+      const sj = await s.json().catch(function () { return {}; });
+      if (sj.failed) throw new Error(sj.error || 'A RunPod generalas sikertelen.');
+      if (sj.ok && sj.ready && sj.png_base64) return sj;
+    }
+    throw new Error('A RunPod feladat időkorlátja lejárt. Ellenőrizd a worker logját.');
   }
 
   async function runViaGenerate(f) {
     setStage('analyzing');
     const fd = new FormData();
     fd.append('image', f);
-    fd.append('mode', 'lineart');
+    fd.append('mode', imageMode);
     fd.append('target_coverage', '0.06');
-    fd.append('max_dim', '2000');
-    fd.append('bridge_width', '2');
-    fd.append('line_weight', '1.5');
+    fd.append('max_dim', '768');
+    fd.append('strength', '0.38');
     fd.append('width_mm', String(widthMm));
     fd.append('dpi', String(dpi));
     fd.append('title', title || (f.name || 'stencil').replace(/\.[^.]+$/, ''));
+    if (imagePrompt.trim()) fd.append('prompt', imagePrompt.trim());
 
     const res = await fetch('/api/stencil/generate', { method: 'POST', body: fd });
-    const out = await res.json();
-
-    if (out.cached && out.result) {
-      await finishFromGpuPng(out.result.png_base64, { gpu: null, cached: true });
-      return;
-    }
-    if (!out.ok) throw new Error(out.error || 'Hiba');
+    const out = await res.json().catch(function () { return {}; });
+    if (!res.ok || !out.ok) throw new Error(out.error || 'RunPod indítási hiba.');
 
     setStage('gpu');
-    const jobId = out.jobId;
-    let done = null;
-    for (let i = 0; i < 150; i++) {
-      await new Promise(function (r) { setTimeout(r, 2000); });
-      const s = await fetch('/api/stencil/generate?id=' + encodeURIComponent(jobId) + '&what=result');
-      const sj = await s.json();
-      if (sj.ok && sj.ready) { done = sj.result; break; }
-      const st = await fetch('/api/stencil/generate?id=' + encodeURIComponent(jobId));
-      const stj = await st.json();
-      if (stj.status && stj.status.status === 'error') throw new Error(stj.status.error || 'Hiba');
-    }
-    if (!done) throw new Error('Az elso futasnal a modell betoltese 2-4 perc. Probald ujra.');
-
-    await finishFromGpuPng(done.png_base64, {
-      gpu: { ms: done.gpuMs, engine: done.engine },
-      gpuCoverage: done.coverage
-    });
+    const done = await waitRunpod('/api/stencil/generate', out);
+    await finishFromGpuPng(done.png_base64, done);
   }
 
   const process = useCallback(async function () {
@@ -160,6 +222,7 @@ export default function StencilTool({ lang }) {
       const h = await hp.json();
       setEngineMode(h.mode || 'browser');
       const gpuOn = h.mode === 'runpod';
+      if (!gpuOn) throw new Error('A RunPod GPU motor nincs beállítva. Az InkForge most kizárólag RunPoddal generál.');
 
       if (tab === 'text') {
         if (description.trim().length < 4) throw new Error('Irj le, mit abrazoljon.');
@@ -179,22 +242,8 @@ export default function StencilTool({ lang }) {
         if (!out.ok) throw new Error(out.error || 'Hiba');
         if (out.embeddedText) setInfo('Felismerve: ' + out.embeddedText);
 
-        const jobId = out.jobId;
-        let done = null;
-        for (let i = 0; i < 150; i++) {
-          await new Promise(function (r) { setTimeout(r, 2000); });
-          const s = await fetch('/api/stencil/from-text?id=' + encodeURIComponent(jobId) + '&what=result');
-          const sj = await s.json();
-          if (sj.ok && sj.ready) { done = sj.result; break; }
-          const st = await fetch('/api/stencil/from-text?id=' + encodeURIComponent(jobId));
-          const stj = await st.json();
-          if (stj.status && stj.status.status === 'error') throw new Error(stj.status.error || 'Hiba');
-        }
-        if (!done) throw new Error('Az elso futasnal a modell betoltese 2-4 perc. Probald ujra.');
-
-        await finishFromGpuPng(done.png_base64, {
-          prompt: done.prompt, gpu: { ms: done.gpuMs, engine: done.engine }
-        });
+        const done = await waitRunpod('/api/stencil/from-text', out);
+        await finishFromGpuPng(done.png_base64, done);
 
       } else if (tab === 'url') {
         if (!/^https?:\/\//.test(imageUrl.trim())) throw new Error('Add meg a kep linkjet.');
@@ -210,35 +259,12 @@ export default function StencilTool({ lang }) {
         const out = await res.json();
         if (!out.ok) throw new Error(out.error || 'Hiba');
 
-        const jobId = out.jobId;
-        let done = null;
-        for (let i = 0; i < 150; i++) {
-          await new Promise(function (r) { setTimeout(r, 2000); });
-          const s = await fetch('/api/stencil/from-url?id=' + encodeURIComponent(jobId) + '&what=result');
-          const sj = await s.json();
-          if (sj.ok && sj.ready) { done = sj.result; break; }
-          const st = await fetch('/api/stencil/from-url?id=' + encodeURIComponent(jobId));
-          const stj = await st.json();
-          if (stj.status && stj.status.status === 'error') throw new Error(stj.status.error || 'Hiba');
-        }
-        if (!done) throw new Error('Az elso futasnal a modell betoltese 2-4 perc. Probald ujra.');
-
-        await finishFromGpuPng(done.png_base64, { gpu: { ms: done.gpuMs } });
+        const done = await waitRunpod('/api/stencil/from-url', out);
+        await finishFromGpuPng(done.png_base64, done);
 
       } else {
         if (!file) { setBusy(false); clearInterval(iv); return; }
-        if (gpuOn) {
-          await runViaGenerate(file);
-        } else {
-          setInfo('A GPU motor nem elerheto — a bongeszo-motor fut (tonal ag, tomeges).');
-          setStage('analyzing');
-          const res = await runStencil(file, {
-            widthMm: widthMm, dpi: dpi, branch: 'auto',
-            baseStroke: 1, bridgePx: 2, minArea: 20, polish: 1,
-            fillHoles: false, registration: true, layers: 1
-          }, function (s) { setStage(s); });
-          setResult(Object.assign({}, res, { url: previewURL(res.mask, res.width, res.height, 1100) }));
-        }
+        await runViaGenerate(file);
       }
     } catch (e) {
       setError(e && e.message ? e.message : 'Hiba');
@@ -246,7 +272,7 @@ export default function StencilTool({ lang }) {
       clearInterval(iv);
       setBusy(false); setStage('');
     }
-  }, [tab, file, description, imageUrl, widthMm, dpi, styleSlug, bodyPart, title]);
+  }, [tab, file, description, imageUrl, widthMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt]);
 
   const r = result && result.report;
   const p = result && result.print;
@@ -289,6 +315,23 @@ export default function StencilTool({ lang }) {
               className={'card3d cursor-pointer p-8 text-center transition ' + (drag ? 'border-amber-500' : '')}>
               <input ref={inputRef} type="file" accept="image/*" className="hidden"
                 onChange={function (e) { onPick(e.target.files && e.target.files[0]); }} />
+              <div className="mb-5 grid gap-3">
+                <label className="block text-left">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Kép feldolgozás</span>
+                  <select value={imageMode} onChange={function (e) { setImageMode(e.target.value); }}
+                    className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
+                    <option value="image_to_image_stencil">AI kép → kép → éles stencil</option>
+                    <option value="image_to_stencil">Kép → közvetlen éles stencil</option>
+                    <option value="image_to_image">AI kép → kép</option>
+                  </select>
+                </label>
+                <label className="block text-left">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Kiegészítő prompt</span>
+                  <input value={imagePrompt} onChange={function (e) { setImagePrompt(e.target.value); }}
+                    placeholder="pl. preserve face, simplify details, bold clean tattoo lines"
+                    className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
+                </label>
+              </div>
               {preview ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={preview} alt="" className="mx-auto max-h-72 rounded-lg border border-stone-700" />
@@ -338,6 +381,23 @@ export default function StencilTool({ lang }) {
                   className="mt-2 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
                 <span className="mt-1 block text-xs text-stone-500">Teljes cim, pl. https://.../minta.png</span>
               </label>
+              <div className="mt-5 grid gap-3">
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Kép feldolgozás</span>
+                  <select value={imageMode} onChange={function (e) { setImageMode(e.target.value); }}
+                    className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
+                    <option value="image_to_image_stencil">AI kép → kép → éles stencil</option>
+                    <option value="image_to_stencil">Kép → közvetlen éles stencil</option>
+                    <option value="image_to_image">AI kép → kép</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Kiegészítő prompt</span>
+                  <input value={imagePrompt} onChange={function (e) { setImagePrompt(e.target.value); }}
+                    placeholder="pl. preserve subject, clean tattoo linework"
+                    className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
+                </label>
+              </div>
             </div>
           )}
 

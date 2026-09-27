@@ -1,4 +1,5 @@
 import { ONE_OFF_GENERATIONS, SUBSCRIPTION_PLANS } from '../../../../lib/pricing';
+import CheckoutButton from '../../../../components/CheckoutButton';
 
 export default function PricingPage({ params }) {
   const lang = (params && params.lang) || 'hu';
@@ -24,9 +25,7 @@ export default function PricingPage({ params }) {
               <div className="text-sm text-stone-400">{p.label}</div>
               <div className="mt-2 text-3xl font-bold text-amber-400">{p.priceHuf.toLocaleString('hu-HU')} Ft</div>
               <div className="mt-2 text-xs text-stone-500">{hu ? 'sikeres generálás után 1–1 kreditlevonás' : 'credits are consumed only after success'}</div>
-              <a href={'/' + lang + '/belepes?checkout=' + p.id} className="mt-5 block rounded-lg bg-amber-500 px-4 py-2.5 text-center text-sm font-semibold text-stone-950 hover:bg-amber-400">
-                {hu ? 'Vásárlás' : 'Buy'}
-              </a>
+              <CheckoutButton lang={lang} checkoutKey={p.id} className="mt-5 block w-full rounded-lg bg-amber-500 px-4 py-2.5 text-center text-sm font-semibold text-stone-950 hover:bg-amber-400">{hu ? 'Vásárlás' : 'Buy'}</CheckoutButton>
             </div>
           ))}
         </div>
@@ -53,9 +52,7 @@ export default function PricingPage({ params }) {
               <div className="mt-4 text-sm text-stone-400">
                 {Math.round(p.priceHuf / p.generations).toLocaleString('hu-HU')} Ft / generálás
               </div>
-              <a href={'/' + lang + '/belepes?plan=' + p.id} className="mt-6 block rounded-lg border border-amber-600/60 px-4 py-2.5 text-center text-sm font-semibold text-amber-300 hover:bg-amber-500 hover:text-stone-950">
-                {hu ? 'Csomag választása' : 'Choose plan'}
-              </a>
+              <CheckoutButton lang={lang} checkoutKey={p.id} className="mt-6 block w-full rounded-lg border border-amber-600/60 px-4 py-2.5 text-center text-sm font-semibold text-amber-300 hover:bg-amber-500 hover:text-stone-950">{hu ? 'Csomag választása' : 'Choose plan'}</CheckoutButton>
             </div>
           ))}
         </div>

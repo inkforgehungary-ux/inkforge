@@ -74,6 +74,7 @@ export default function StencilTool({ lang }) {
   const [title, setTitle] = useState('');
   const [imageMode, setImageMode] = useState('image_to_image_stencil');
   const [imagePrompt, setImagePrompt] = useState('');
+  const [textMode, setTextMode] = useState('text_to_stencil');
 
   const onPick = useCallback(function (f) {
     if (!f) return;
@@ -167,7 +168,8 @@ export default function StencilTool({ lang }) {
         engine: extra && (extra.engine || 'InkForge RunPod')
       },
       gpuCoverage: coverage,
-      prompt: extra && extra.prompt ? extra.prompt : null
+      prompt: extra && extra.prompt ? extra.prompt : null,
+      isStencil: !(extra && (extra.mode === 'image_to_image' || extra.mode === 'text_to_image'))
     });
   }
 
@@ -235,7 +237,8 @@ export default function StencilTool({ lang }) {
             style_slug: styleSlug,
             body_part: bodyPart || null,
             width_mm: widthMm, dpi: dpi,
-            title: title || description.trim().slice(0, 60)
+            title: title || description.trim().slice(0, 60),
+            mode: textMode
           })
         });
         const out = await res.json();
@@ -253,6 +256,8 @@ export default function StencilTool({ lang }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             url: imageUrl.trim(), width_mm: widthMm, dpi: dpi,
+            mode: imageMode,
+            prompt: imagePrompt.trim(),
             target_coverage: 0.06, title: title || 'link-minta'
           })
         });
@@ -349,6 +354,14 @@ export default function StencilTool({ lang }) {
 
           {tab === 'text' && (
             <div className="card3d p-6">
+              <div className="mb-5">
+                <span className="text-xs uppercase tracking-wider text-stone-500">Kimenet</span>
+                <select value={textMode} onChange={function (e) { setTextMode(e.target.value); }}
+                  className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
+                  <option value="text_to_stencil">Prompt → éles stencil</option>
+                  <option value="text_to_image">Prompt → AI kép</option>
+                </select>
+              </div>
               <label className="block">
                 <span className="text-sm text-stone-300">Mit abrazoljon?</span>
                 <textarea value={description} onChange={function (e) { setDescription(e.target.value); }}
@@ -486,6 +499,7 @@ export default function StencilTool({ lang }) {
                 <img src={result.url} alt="" className="mx-auto block max-h-[420px] w-auto" />
               </div>
 
+              {result.isStencil !== false && (
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <Stat label="Mert meret" value={p.widthMm + ' x ' + p.heightMm + ' mm'} gold />
                 <Stat label="Raszter" value={p.px} />
@@ -494,11 +508,14 @@ export default function StencilTool({ lang }) {
                 <Stat label="Hidak" value={String(r.bridges)} />
                 <Stat label="Kulon darab" value={String(r.islands)} tone={r.islands > 1 ? 'warn' : 'ok'} />
               </div>
+              )}
 
+              {result.isStencil !== false && (
               <div className={'mt-4 rounded-lg border px-4 py-3 text-sm ' + (qualityTone === 'ok' ? 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300' : qualityTone === 'warn' ? 'border-amber-900/60 bg-amber-950/30 text-amber-300' : 'border-red-900/60 bg-red-950/30 text-red-300')}>
                 <div className="font-semibold">Minoseg: {r.quality}</div>
                 <div className="mt-1 text-xs opacity-90">{r.verdictText || ''}</div>
               </div>
+              )}
 
               {result.gpu && (
                 <p className="mt-3 text-xs text-stone-500">
@@ -516,14 +533,25 @@ export default function StencilTool({ lang }) {
                 </details>
               )}
 
-              <button
-                onClick={async function () {
-                  const png = await maskToPNGBytes(result.mask, result.width, result.height, { transparent: true });
-                  downloadBlob(png, 'inkforge-' + (title || 'stencil') + '-' + p.widthMm + 'mm.png', 'image/png');
-                }}
-                className="btn3d mt-5 w-full !py-3.5">PNG letoltese (atlatszo)</button>
-
-              <p className="mt-3 text-xs leading-relaxed text-stone-500">Nyomtatas 100%-os meretben — kapcsold ki a Fit to page opciot.</p>
+              {result.isStencil !== false ? (
+                <>
+                  <button
+                    onClick={async function () {
+                      const png = await maskToPNGBytes(result.mask, result.width, result.height, { transparent: true });
+                      downloadBlob(png, 'inkforge-' + (title || 'stencil') + '-' + p.widthMm + 'mm.png', 'image/png');
+                    }}
+                    className="btn3d mt-5 w-full !py-3.5">PNG letöltése (átlátszó)</button>
+                  <p className="mt-3 text-xs leading-relaxed text-stone-500">Nyomtatás 100%-os méretben — kapcsold ki a Fit to page opciót.</p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3 text-sm text-stone-300">
+                    Ez egy közvetlen AI kép. A stencil mód helyett a generált képet kaptad vissza.
+                  </p>
+                  <a href={result.url} download={'inkforge-' + (title || 'ai-kep') + '.png'}
+                    className="btn3d mt-5 block w-full !py-3.5 text-center">AI kép letöltése</a>
+                </>
+              )}
             </div>
           )}
         </div>

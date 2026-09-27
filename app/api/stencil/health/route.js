@@ -1,5 +1,5 @@
-// INKFORGE — ENGINE HEALTH (v3)
-// GET /api/stencil/health — MINDEN Runpod utvonalat kiprobal.
+// INKFORGE — ENGINE HEALTH (v4)
+// Egyetlen olcso health-check: /health. Nem inditunk /run vagy /runsync tesztjobot.
 
 export async function GET() {
   const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
@@ -26,34 +26,27 @@ export async function GET() {
 
   if (!stencilUrl || !hasKey) return Response.json(out);
 
-  const base = stencilUrl.replace(/\/+$/, '');
-
-  async function probe(path, method, body) {
-    const t0 = Date.now();
-    try {
-      const opts = { method: method, headers: { 'Authorization': 'Bearer ' + key }, signal: AbortSignal.timeout(12000) };
-      if (body) {
-        opts.headers['Content-Type'] = 'application/json';
-        opts.body = JSON.stringify(body);
-      }
-      const r = await fetch(base + path, opts);
-      const txt = await r.text();
-      return { path: path, method: method, status: r.status, ms: Date.now() - t0, body: txt.slice(0, 240) };
-    } catch (e) {
-      return { path: path, method: method, error: String(e && e.message ? e.message : e).slice(0, 150) };
-    }
+  const base = stencilUrl.replace(/\\/+$/, '');
+  const t0 = Date.now();
+  try {
+    const r = await fetch(base + '/health', {
+      headers: { 'Authorization': 'Bearer ' + key },
+      signal: AbortSignal.timeout(8000)
+    });
+    const body = await r.text();
+    out.runpod.health = {
+      status: r.status,
+      ok: r.ok,
+      ms: Date.now() - t0,
+      body: body.slice(0, 500)
+    };
+  } catch (e) {
+    out.runpod.health = {
+      ok: false,
+      ms: Date.now() - t0,
+      error: String(e && e.message ? e.message : e).slice(0, 200)
+    };
   }
-
-  out.runpod.probes.push(await probe('/health', 'GET'));
-  out.runpod.probes.push(await probe('/', 'GET'));
-  out.runpod.probes.push(await probe('/runsync', 'POST', { input: {} }));
-  out.runpod.probes.push(await probe('/run', 'POST', { input: {} }));
-  out.runpod.probes.push(await probe('/v1/runsync', 'POST', { input: {} }));
-  out.runpod.probes.push(await probe('/v1/run', 'POST', { input: {} }));
-
-  out.runpod.working_paths = out.runpod.probes
-    .filter(function (p) { return p.status && p.status !== 404 && p.status !== 403; })
-    .map(function (p) { return p.method + ' ' + p.path + ' -> ' + p.status; });
 
   return Response.json(out);
 }

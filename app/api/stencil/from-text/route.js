@@ -51,8 +51,9 @@ export async function POST(req) {
     }));
     const stencilId=created?created.id:null;
 
+    const mode=body.mode==='text_to_image'?'text_to_image':'text_to_stencil';
     const start=await runpodRun({
-      mode:'text_to_stencil',
+      mode:mode,
       prompt:built.prompt,
       negative:built.negative,
       max_side:768,

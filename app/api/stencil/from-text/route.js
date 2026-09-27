@@ -1,3 +1,4 @@
+// Build-safe import separation for Vercel/Next.js.
 // INKFORGE — PROMPT -> KÉP -> ÉLES STENCIL
 // POST /api/stencil/from-text -> RunPod text_to_stencil
 // GET  /api/stencil/from-text?id=... -> RunPod status

@@ -141,6 +141,34 @@ export default function StencilTool({ lang }) {
     return setInterval(function () { setElapsed(Math.round((Date.now() - t0) / 1000)); }, 1000);
   }
 
+  async function finishFromDrawingPng(base64Png, extra) {
+    setStage('converting');
+    const bin = atob(base64Png);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
+
+    setPreview(url);
+    setResult({
+      mask: null,
+      width: Number(extra && extra.width || 0),
+      height: Number(extra && extra.height || 0),
+      url,
+      generatedUrl: null,
+      report: null,
+      print: null,
+      gpu: {
+        ms: Number(extra && extra.gpuMs || 0),
+        engine: extra && extra.engine ? extra.engine : 'InkForge RunPod'
+      },
+      gpuCoverage: null,
+      prompt: 'Kép → vékony vonalas rajz',
+      isStencil: false,
+      drawing: true
+    });
+  }
+
   async function finishFromGpuPng(base64Png, extra) {
     setStage('converting');
     const bin = atob(base64Png);
@@ -342,6 +370,22 @@ export default function StencilTool({ lang }) {
         const done = await waitRunpod('/api/stencil/from-text', out);
         await finishFromGpuPng(done.png_base64, done);
 
+      } else if (tab === 'drawing') {
+        if (!file) throw new Error('Tölts fel egy képet.');
+        setStage('generating');
+        const uploadFile = await compressForRunpod(file);
+        const fd = new FormData();
+        fd.append('image', uploadFile);
+        if (imagePrompt.trim()) fd.append('prompt', imagePrompt.trim());
+
+        const res = await fetch('/api/convert-to-drawing', { method: 'POST', body: fd });
+        const out = await res.json().catch(function () { return {}; });
+        if (!res.ok || !out.ok) throw new Error(out.error || 'Rajz indítási hiba.');
+
+        const done = await waitRunpod('/api/convert-to-drawing', out);
+        if (!done.image_base64) throw new Error('A rajz nem érkezett meg.');
+        await finishFromDrawingPng(done.image_base64, done);
+
       } else if (tab === 'url') {
         if (!/^https?:\/\//.test(imageUrl.trim())) throw new Error('Add meg a kep linkjet.');
         setStage('analyzing');
@@ -533,7 +577,7 @@ export default function StencilTool({ lang }) {
   return (
     <div className="mt-8">
       <div className="flex flex-wrap gap-2">
-        {[['upload', 'Kep feltoltese'], ['text', 'Leirasbol'], ['url', 'Linkbol']].map(function (x) {
+        {[['upload', 'Kep feltoltese'], ['drawing', 'Kep → rajz'], ['text', 'Leirasbol'], ['url', 'Linkbol']].map(function (x) {
           const on = tab === x[0];
           return (
             <button key={x[0]} onClick={function () { setTab(x[0]); setResult(null); setError(''); setInfo(''); }}
@@ -553,6 +597,41 @@ export default function StencilTool({ lang }) {
 
       <div className="mt-6 grid gap-8 lg:grid-cols-2">
         <div>
+          {tab === 'drawing' && (
+            <div className="card3d p-6">
+              <div className="mb-5">
+                <span className="text-xs uppercase tracking-wider text-stone-500">Kép → rajz AI</span>
+                <p className="mt-2 text-sm text-stone-300">
+                  A feltöltött képből tiszta, vékony vonalas rajz készül.
+                </p>
+              </div>
+              <div onDragOver={function (e) { e.preventDefault(); setDrag(true); }}
+                onDragLeave={function () { setDrag(false); }}
+                onDrop={onDrop}
+                onClick={function () { if (inputRef.current) inputRef.current.click(); }}
+                className={'rounded-xl border p-8 text-center cursor-pointer transition ' + (drag ? 'border-amber-500' : 'border-stone-800')}>
+                <input ref={inputRef} type="file" accept="image/*" className="hidden"
+                  onChange={function (e) { onPick(e.target.files && e.target.files[0]); }} />
+                {preview ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={preview} alt="" className="mx-auto max-h-72 rounded-lg border border-stone-700" />
+                ) : (
+                  <>
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center border border-amber-700/60 text-2xl text-amber-500">+</div>
+                    <p className="text-stone-200">Húzd ide a képet, vagy kattints</p>
+                    <p className="mt-2 text-xs text-stone-500">PNG, JPG — vékony, tiszta vonalas rajz</p>
+                  </>
+                )}
+              </div>
+              <label className="mt-5 block">
+                <span className="text-xs uppercase tracking-wider text-stone-500">Opcionális finomító prompt</span>
+                <input value={imagePrompt} onChange={function (e) { setImagePrompt(e.target.value); }}
+                  placeholder="pl. egyszerűbb kontúrok, az arc maradjon felismerhető"
+                  className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
+              </label>
+            </div>
+          )}
+
           {tab === 'upload' && (
             <div onDragOver={function (e) { e.preventDefault(); setDrag(true); }}
               onDragLeave={function () { setDrag(false); }}
@@ -740,7 +819,7 @@ export default function StencilTool({ lang }) {
             </div>
 
             <button onClick={process} disabled={busy || (tab === 'upload' && !file)}
-              className={'btn3d mt-6 w-full !py-4 ' + (busy || (tab === 'upload' && !file) ? 'cursor-not-allowed opacity-40' : '')}>
+              className={'btn3d mt-6 w-full !py-4 ' + (busy || ((tab === 'upload' || tab === 'drawing') && !file) ? 'cursor-not-allowed opacity-40' : '')}>
               {busy ? stageLabel : 'Stencil keszitese'}
             </button>
 

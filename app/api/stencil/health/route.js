@@ -1,5 +1,5 @@
-// INKFORGE — ENGINE HEALTH (diagnosztika)
-// GET /api/stencil/health — reszletes allapot, hogy latszik-e, hol akad el
+// INKFORGE — ENGINE HEALTH (v3)
+// GET /api/stencil/health — MINDEN Runpod utvonalat kiprobal.
 
 export async function GET() {
   const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
@@ -11,48 +11,49 @@ export async function GET() {
 
   const out = {
     ok: true,
-    engine: '2.2.0',
+    engine: '2.3.0',
     runpod: {
       configured: !!(stencilUrl && hasKey),
       stencil_url: stencilUrl,
       text_url: textUrl,
       has_api_key: hasKey,
       key_prefix: key ? key.slice(0, 6) + '...' : null,
-      checks: {}
+      probes: []
     },
-    supabase: {
-      configured: !!(sbUrl && sbKey),
-      url: sbUrl,
-      has_service_key: sbKey
-    },
+    supabase: { configured: !!(sbUrl && sbKey), url: sbUrl, has_service_key: sbKey },
     mode: (stencilUrl && hasKey) ? 'runpod' : 'browser'
   };
 
   if (!stencilUrl || !hasKey) return Response.json(out);
 
   const base = stencilUrl.replace(/\/+$/, '');
-  const H = { 'Authorization': 'Bearer ' + key };
 
-  try {
-    const r = await fetch(base + '/health', { headers: H, signal: AbortSignal.timeout(10000) });
-    const t = await r.text();
-    out.runpod.checks.health = { status: r.status, ok: r.ok, body: t.slice(0, 300) };
-  } catch (e) {
-    out.runpod.checks.health = { ok: false, error: String(e && e.message ? e.message : e) };
+  async function probe(path, method, body) {
+    const t0 = Date.now();
+    try {
+      const opts = { method: method, headers: { 'Authorization': 'Bearer ' + key }, signal: AbortSignal.timeout(12000) };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const r = await fetch(base + path, opts);
+      const txt = await r.text();
+      return { path: path, method: method, status: r.status, ms: Date.now() - t0, body: txt.slice(0, 240) };
+    } catch (e) {
+      return { path: path, method: method, error: String(e && e.message ? e.message : e).slice(0, 150) };
+    }
   }
 
-  try {
-    const r = await fetch(base + '/runsync', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, H),
-      body: JSON.stringify({ input: {} }),
-      signal: AbortSignal.timeout(15000)
-    });
-    const t = await r.text();
-    out.runpod.checks.runsync = { status: r.status, ok: r.ok, body: t.slice(0, 400) };
-  } catch (e) {
-    out.runpod.checks.runsync = { ok: false, error: String(e && e.message ? e.message : e) };
-  }
+  out.runpod.probes.push(await probe('/health', 'GET'));
+  out.runpod.probes.push(await probe('/', 'GET'));
+  out.runpod.probes.push(await probe('/runsync', 'POST', { input: {} }));
+  out.runpod.probes.push(await probe('/run', 'POST', { input: {} }));
+  out.runpod.probes.push(await probe('/v1/runsync', 'POST', { input: {} }));
+  out.runpod.probes.push(await probe('/v1/run', 'POST', { input: {} }));
+
+  out.runpod.working_paths = out.runpod.probes
+    .filter(function (p) { return p.status && p.status !== 404 && p.status !== 403; })
+    .map(function (p) { return p.method + ' ' + p.path + ' -> ' + p.status; });
 
   return Response.json(out);
 }

@@ -1,14 +1,15 @@
 // ============================================================
-// INKFORGE — GENERALAS API
-// A keres bekerul a sorba, majd az allapot lekerdezheto.
+// INKFORGE — GENERALAS a meglevo semahoz
+// POST /api/stencil/generate  -> { jobId } vagy cache-talalat
+// GET  /api/stencil/generate?id=            -> allapot
+// GET  /api/stencil/generate?id=&what=result -> eredmeny
 //
-// 1) POST /api/stencil/generate  -> { jobId }
-// 2) GET  /api/stencil/status?id= -> { status, position, etaS }
-// 3) GET  /api/stencil/result?id= -> { png_base64, report }
+// MENTES: stencils, stencil_layers, credit_ledger
 // ============================================================
 
 import { enqueue, jobStatus, jobResult, queueStats, cacheKey, cacheGet, cacheSet, estimateCost } from '../../../lib/queue.js';
 import { runpodLineart } from '../../../lib/runpod-client.js';
+import { stencilRow, creditEntry, buildNames, storagePaths, BUCKET, CREDIT_COST } from '../../../lib/save.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -17,28 +18,43 @@ function runpodOk() {
   return !!(process.env.RUNPOD_STENCIL_URL && process.env.RUNPOD_API_KEY);
 }
 
+function sbHeaders(extra) {
+  return Object.assign({
+    'apikey': SERVICE_KEY,
+    'Authorization': 'Bearer ' + SERVICE_KEY,
+    'Content-Type': 'application/json'
+  }, extra || {});
+}
+
 async function sbInsert(table, row) {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
       method: 'POST',
-      headers: {
-        'apikey': SERVICE_KEY,
-        'Authorization': 'Bearer ' + SERVICE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
+      headers: sbHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify(row)
     });
     if (!r.ok) return null;
     const j = await r.json();
     return Array.isArray(j) ? j[0] : j;
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
-// ---------- 1. Generalas inditasa ----------
+async function sbUpload(path, bytes, contentType) {
+  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+  try {
+    const r = await fetch(SUPABASE_URL + '/storage/v1/object/' + BUCKET + '/' + path, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + SERVICE_KEY,
+        'Content-Type': contentType,
+        'x-upsert': 'true'
+      },
+      body: bytes
+    });
+    return r.ok ? path : null;
+  } catch (e) { return null; }
+}
 
 export async function POST(req) {
   try {
@@ -52,33 +68,37 @@ export async function POST(req) {
     const targetCoverage = parseFloat(form.get('target_coverage') || '0.06');
     const maxDim = parseInt(form.get('max_dim') || '2000', 10);
     const bridgePx = parseInt(form.get('bridge_width') || '2', 10);
+    const lineWeight = parseFloat(form.get('line_weight') || '1');
     const widthMm = parseFloat(form.get('width_mm') || '100');
     const dpi = parseInt(form.get('dpi') || '300', 10);
+    const title = form.get('title') || 'stencil';
     const userId = form.get('user_id') || null;
     const studioId = form.get('studio_id') || null;
+    const styleId = form.get('style_id') ? parseInt(form.get('style_id'), 10) : null;
+    const wantHd = form.get('hd') === 'true';
 
     const bytes = Buffer.from(await file.arrayBuffer());
-    const key = cacheKey({ name: file.name, size: bytes.length }, {
-      mode, targetCoverage, widthMm, dpi, bridges: true, bridgePx
-    });
 
-    // Cache-talalat: nulla GPU-ido
+    const key = cacheKey({ name: file.name, size: bytes.length },
+      { mode, targetCoverage, widthMm, dpi, bridgePx });
+
     const hit = cacheGet(key);
     if (hit) {
-      return Response.json({ ok: true, cached: true, result: hit, cost: estimateCost(0) });
+      return Response.json({ ok: true, cached: true, result: hit, cost: 0 });
     }
 
     if (!runpodOk()) {
       return Response.json({
         ok: false,
         configured: false,
-        error: 'A GPU motor nincs beallitva. Add meg a RUNPOD_STENCIL_URL es a RUNPOD_API_KEY kornyezeti valtozot.',
+        error: 'A GPU motor nincs beallitva. Add meg a RUNPOD_STENCIL_URL es a RUNPOD_API_KEY valtozot.',
         queue: queueStats()
       }, { status: 503 });
     }
 
-    const blob = new Blob([bytes], { type: file.type || 'image/png' });
-    const fakeFile = new File([blob], file.name || 'image.png', { type: file.type || 'image/png' });
+    const mime = file.type || 'image/png';
+    const fname = file.name || 'image.png';
+    const fakeFile = new File([new Blob([bytes], { type: mime })], fname, { type: mime });
 
     const jobId = enqueue(async function () {
       const t0 = Date.now();
@@ -86,8 +106,44 @@ export async function POST(req) {
         mode, maxDim, targetCoverage, bridges: true, bridgeWidth: bridgePx
       });
       const ms = Date.now() - t0;
+      const heightMm = Math.round(widthMm * r.height / r.width * 100) / 100;
+
+      const names = buildNames(title, widthMm, dpi);
+      const paths = storagePaths(studioId, names);
+      const pngBytes = Buffer.from(r.png_base64, 'base64');
+      const pngPath = await sbUpload(paths.png, pngBytes, 'image/png');
+
+      const row = stencilRow({
+        userId: userId,
+        studioId: studioId,
+        title: title,
+        sourceType: 'upload',
+        sourcePath: null,
+        styleId: styleId,
+        status: 'ready',
+        lineWeight: lineWeight,
+        bridgeWidth: bridgePx,
+        widthMm: widthMm,
+        heightMm: heightMm,
+        dpi: dpi,
+        branchUsed: 'runpod-' + mode,
+        coverage: r.coverage,
+        previewPath: pngPath,
+        pdfPath: null
+      });
+
+      const saved = await sbInsert('stencils', row);
+
+      if (studioId) {
+        await sbInsert('credit_ledger', creditEntry(
+          studioId,
+          mode === 'lineart' ? 'stencil_generate' : 'stencil_generate_' + mode,
+          wantHd ? CREDIT_COST.generate_hd : CREDIT_COST.generate
+        ));
+      }
 
       const result = {
+        id: saved ? saved.id : null,
         png_base64: r.png_base64,
         width: r.width,
         height: r.height,
@@ -98,38 +154,21 @@ export async function POST(req) {
         quality: r.quality,
         engine: r.engine,
         ms: ms,
-        gpuMs: r.ms || ms
+        gpuMs: r.ms || ms,
+        stored: { png: pngPath }
       };
 
       cacheSet(key, result);
-
-      // Naplozas a Supabase-ba (ha be van allitva)
-      await sbInsert('stencil_usage', {
-        user_id: userId,
-        studio_id: studioId,
-        mode: mode,
-        target_coverage: targetCoverage,
-        width_mm: widthMm,
-        dpi: dpi,
-        coverage_pct: r.coverage,
-        bridges: r.bridges,
-        islands: r.islands,
-        quality: r.quality,
-        gpu_ms: r.ms || ms,
-        total_ms: ms,
-        engine: r.engine,
-        source: 'runpod'
-      });
-
       return result;
-    }, { mode, targetCoverage });
+    }, { mode: mode, targetCoverage: targetCoverage });
 
     return Response.json({
       ok: true,
       cached: false,
       jobId: jobId,
       queue: queueStats(),
-      estimate: estimateCost(1)
+      estimate: estimateCost(1),
+      cost: wantHd ? CREDIT_COST.generate_hd : CREDIT_COST.generate
     });
   } catch (e) {
     if (e && e.code === 'QUEUE_FULL') {
@@ -151,8 +190,7 @@ export async function GET(req) {
   if (what === 'result') {
     const res = jobResult(id);
     if (!res) {
-      const st = jobStatus(id);
-      return Response.json({ ok: false, ready: false, status: st }, { status: 202 });
+      return Response.json({ ok: false, ready: false, status: jobStatus(id) }, { status: 202 });
     }
     return Response.json({ ok: true, ready: true, result: res });
   }

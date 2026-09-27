@@ -9,8 +9,6 @@ export const viewport = {
   initialScale: 1,
 };
 
-// A gyoker layout: csak a HTML-keret + a globalis stilusok.
-// A nyelvi layout ([lang]/layout.js) adja a nyelv-specifikus reszt.
 import '../globals.css';
 
 export default function RootLayout({ children }) {

@@ -12,11 +12,7 @@ export default function HomePage({ params }) {
   return (
     <main className="min-h-screen">
       <header className="relative w-full overflow-hidden">
-        <picture>
-          <source media="(min-width: 1600px)" srcSet="/fejlec-1920.png" />
-          <source media="(min-width: 1000px)" srcSet="/fejlec-1200.png" />
-          <img src="/fejlec-800.png" alt="InkForge" className="w-full h-auto block" />
-        </picture>
+        <img src="/fejlec-800.png" alt="InkForge" className="w-full h-auto block" />
 
         <div className="absolute bottom-0 start-0 end-0 px-6 pb-6 sm:pb-10">
           <div className="mx-auto max-w-6xl">

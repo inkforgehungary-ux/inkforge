@@ -1,22 +1,43 @@
-const { execSync } = require('child_process');
+// A repo GYOKEREBEN levo public/ mappa kepeinek atmasolasa
+// a web/public mappaba, minden build elott.
+// Igy a /fejlec-800.png stb. utvonalak statikusan elerhetok.
+
 const fs = require('fs');
 const path = require('path');
 
-const src = path.join(__dirname, '..', '..', 'public');
-const dst = path.join(__dirname, '..', 'public');
+const candidates = [
+  path.join(__dirname, '..', '..', 'public'),   // repo gyokere
+  path.join(process.cwd(), '..', 'public'),
+  path.join(process.cwd(), 'public'),
+];
 
-try {
-  if (fs.existsSync(src)) {
+const dst = path.join(__dirname, '..', 'public');
+const exts = ['.png', '.jpg', '.jpeg', '.svg', '.ico', '.webp'];
+
+let copied = 0;
+
+for (const src of candidates) {
+  try {
+    if (!fs.existsSync(src)) continue;
     fs.mkdirSync(dst, { recursive: true });
     for (const f of fs.readdirSync(src)) {
-      if (f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.svg') || f.endsWith('.ico')) {
-        fs.copyFileSync(path.join(src, f), path.join(dst, f));
-      }
+      if (!exts.some((e) => f.toLowerCase().endsWith(e))) continue;
+      const target = path.join(dst, f);
+      fs.copyFileSync(path.join(src, f), target);
+      copied++;
     }
-    console.log('Kepek atmasolva a web/public mappaba.');
-  } else {
-    console.log('Nincs gyoker public/ mappa, kihagyva.');
+    console.log('Forras:', src, '->', copied, 'fajl atmasolva');
+    break;
+  } catch (e) {
+    console.log('Kihagyva (' + src + '):', e.message);
   }
-} catch (e) {
-  console.log('Masolasi hiba:', e.message);
+}
+
+if (copied === 0) {
+  console.log('FIGYELEM: nem talaltam kepeket a gyoker public/ mappaban.');
+  // Fallback: ha van mar valami a web/public-ban, azt hasznaljuk
+  try {
+    fs.mkdirSync(dst, { recursive: true });
+    console.log('web/public tartalma:', fs.readdirSync(dst).join(', ') || '(ures)');
+  } catch (e) { /* nem baj */ }
 }

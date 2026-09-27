@@ -5,4 +5,3 @@ out/
 *.log
 .env
 .env.local
-.env.*.local

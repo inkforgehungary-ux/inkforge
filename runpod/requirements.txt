@@ -1,0 +1,17 @@
+# InkForge Stencil AI — Runpod fuggosegek
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-multipart==0.0.9
+pydantic==2.7.4
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.1.2
+torchvision==0.16.2
+numpy==1.26.4
+
+opencv-python-headless==4.10.0.84
+Pillow==10.3.0
+scikit-image==0.23.2
+scipy==1.13.1
+
+requests==2.32.3

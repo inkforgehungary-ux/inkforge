@@ -136,41 +136,68 @@ def _lineart_prompt(user_prompt: str) -> str:
         "no grey, no color, no texture, print-ready tattoo transfer artwork"
     )
 
+def _thin_mask(mask: np.ndarray) -> np.ndarray:
+    """Skeletonize binary edges to approximately one-pixel lines."""
+    try:
+        thinning = cv2.ximgproc.thinning
+        return thinning(mask, thinningType=cv2.ximgproc.THINNING_ZHANGSUEN)
+    except Exception:
+        # Small, dependency-free Zhang-Suen fallback.
+        img = (mask > 0).astype(np.uint8)
+        changed = True
+        while changed:
+            changed = False
+            for step in (0, 1):
+                p = np.pad(img, 1, mode="constant")
+                P2,P3,P4,P5,P6,P7,P8,P9 = [p[1+d[0]:1+d[0]+img.shape[0], 1+d[1]:1+d[1]+img.shape[1]]
+                    for d in [(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1),(-1,-1)]]
+                n = P2+P3+P4+P5+P6+P7+P8+P9
+                transitions = ((P2==0)&(P3==1)).astype(np.uint8)+((P3==0)&(P4==1)).astype(np.uint8)+((P4==0)&(P5==1)).astype(np.uint8)+((P5==0)&(P6==1)).astype(np.uint8)+((P6==0)&(P7==1)).astype(np.uint8)+((P7==0)&(P8==1)).astype(np.uint8)+((P8==0)&(P9==1)).astype(np.uint8)+((P9==0)&(P2==1)).astype(np.uint8)
+                if step == 0:
+                    remove = (img==1)&(n>=2)&(n<=6)&(transitions==1)&((P2*P4*P6)==0)&((P4*P6*P8)==0)
+                else:
+                    remove = (img==1)&(n>=2)&(n<=6)&(transitions==1)&((P2*P4*P8)==0)&((P2*P6*P8)==0)
+                if np.any(remove):
+                    img[remove] = 0
+                    changed = True
+        return (img*255).astype(np.uint8)
+
 def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
     rgb = np.array(pil.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
 
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-    gray = clahe.apply(gray)
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    # Strong blur suppresses photographic micro-texture before edge detection.
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
     if source_mode in ("text_to_stencil", "image_to_image_stencil"):
-        # AI tattoo artwork: prefer contours over filled/shaded regions.
-        # Combining Otsu with Canny turns dark shading into large black blobs.
-        edges = cv2.Canny(gray, 70, 180)
+        # Only contours. Never threshold the image into filled black areas.
+        edges = cv2.Canny(gray, 110, 220, apertureSize=3, L2gradient=True)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
         mask = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-        # Remove tiny noise and reinforce only the actual contour strokes.
-        mask = cv2.dilate(mask, np.ones((2, 2), np.uint8), iterations=1)
     else:
-        # Photo/reference trace: edge-first, preserving the original silhouette.
-        edges = cv2.Canny(gray, 55, 160)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        mask = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        # Direct photo/reference tracing: conservative edge extraction.
+        edges = cv2.Canny(gray, 90, 200, apertureSize=3, L2gradient=True)
+        mask = cv2.morphologyEx(
+            edges,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        )
 
-    # Remove tiny components and keep the actual drawing lines.
+    # Thin every surviving contour to a single clean stroke.
+    mask = _thin_mask(mask)
+
+    # Remove speckles, but keep meaningful tattoo contours.
     num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     out = np.zeros_like(mask)
-    min_area = max(3, int(mask.shape[0] * mask.shape[1] * 0.00001))
+    min_area = max(6, int(mask.shape[0] * mask.shape[1] * 0.000008))
+    max_area = int(mask.shape[0] * mask.shape[1] * 0.08)
     for idx in range(1, num):
-        if stats[idx, cv2.CC_STAT_AREA] >= min_area:
+        area = stats[idx, cv2.CC_STAT_AREA]
+        if min_area <= area <= max_area:
             out[labels == idx] = 255
 
-    # One controlled pass for crisp, printable strokes.
-    out = cv2.dilate(out, np.ones((2, 2), np.uint8), iterations=1)
+    # Never dilate: output is intentionally a one-pixel line stencil.
     return out
 
 def _mask_png(mask: np.ndarray) -> str:
@@ -274,7 +301,7 @@ def handler(job: dict):
     max_side = max(512, min(1024, max_side))
     steps = max(8, min(40, int(inp.get("steps") or DEFAULT_STEPS)))
     guidance = max(1.0, min(8.0, float(inp.get("guidance") or 5.5)))
-    strength = max(0.15, min(0.85, float(inp.get("strength") or 0.38)))
+    strength = max(0.15, min(0.85, float(inp.get("strength") or 0.28)))
     prompt = str(inp.get("prompt") or "tattoo design").strip()
     negative = str(inp.get("negative") or LINEART_NEGATIVE).strip()
     return_generated = bool(inp.get("return_generated", True))

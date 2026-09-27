@@ -1,6 +1,6 @@
-import { getDictionary, makeT, getFontClass, LOCALE_CODES } from '../../lib/i18n/config';
-import LocaleShell from '../../components/LocaleShell';
-import HomeContent from '../../components/HomeContent';
+import { getDictionary, makeT, getFontClass, LOCALE_CODES } from '../../../lib/i18n/config';
+import LocaleShell from '../../../components/LocaleShell';
+import HomeContent from '../../../components/HomeContent';
 
 export function generateMetadata({ params }) {
   const t = makeT(getDictionary(params.lang));
@@ -20,7 +20,7 @@ export default function HomePage({ params }) {
 
   return (
     <div className={fontClass} dir={dir} lang={lang}>
-      <LocaleShell lang={lang} t={t}>
+      <LocaleShell lang={lang} t={t} dir={dir}>
         <HomeContent t={t} lang={lang} />
       </LocaleShell>
     </div>

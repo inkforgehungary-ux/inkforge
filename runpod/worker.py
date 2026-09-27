@@ -204,6 +204,21 @@ def _metrics(mask: np.ndarray):
         verdict = "Éles, nyomtatható stencil-vonalrajz."
     return round(coverage, 2), islands, quality, verdict
 
+def _target_dimensions(inp: dict, max_side: int) -> tuple[int, int]:
+    # Text generation keeps the requested physical aspect ratio.
+    tw = max(1.0, float(inp.get("target_width_mm") or 100))
+    th = max(1.0, float(inp.get("target_height_mm") or tw))
+    aspect = th / tw
+    if aspect >= 1.0:
+        height = max_side
+        width = int(round((max_side / aspect) / 64.0) * 64)
+    else:
+        width = max_side
+        height = int(round((max_side * aspect) / 64.0) * 64)
+    width = max(64, min(max_side, width))
+    height = max(64, min(max_side, height))
+    return width, height
+
 def _generate_text(prompt: str, negative: str, width: int, height: int, steps: int, guidance: float, seed: int):
     pipe = _load_text_pipe()
     generator = torch.Generator(device="cpu").manual_seed(seed)
@@ -272,7 +287,8 @@ def handler(job: dict):
         )
 
     if mode == "text_to_image":
-        generated = _generate_text(prompt, negative, max_side, max_side, steps, guidance, seed)
+        tw, th = _target_dimensions(inp, max_side)
+        generated = _generate_text(prompt, negative, tw, th, steps, guidance, seed)
         return {
             "ok": True,
             "engine": ENGINE_VERSION,
@@ -300,7 +316,8 @@ def handler(job: dict):
         }
 
     if mode == "text_to_stencil":
-        generated = _generate_text(prompt, negative, max_side, max_side, steps, guidance, seed)
+        tw, th = _target_dimensions(inp, max_side)
+        generated = _generate_text(prompt, negative, tw, th, steps, guidance, seed)
         stencil_source = generated
     elif mode == "image_to_image_stencil":
         generated = _generate_img2img(

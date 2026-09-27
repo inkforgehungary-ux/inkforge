@@ -93,6 +93,7 @@ export default function StencilTool({ lang }) {
   const [title, setTitle] = useState('');
   const [imageMode, setImageMode] = useState('image_to_stencil');
   const [imagePrompt, setImagePrompt] = useState('');
+  const [drawingStyle, setDrawingStyle] = useState('line');
   const [textMode, setTextMode] = useState('text_to_stencil');
   function setTargetWidth(value) {
     const v = Math.max(20, Math.min(700, Number(value) || 20));
@@ -171,7 +172,9 @@ export default function StencilTool({ lang }) {
         engine: extra && extra.engine ? extra.engine : 'InkForge RunPod'
       },
       gpuCoverage: Number(extra && extra.coverage || 0),
-      prompt: 'Kép → DexiNed + HED professzionális kontúrrajz',
+      prompt: drawingStyle === 'stencil'
+        ? 'Kép → DexiNed + HED professzionális tetováló stencil'
+        : 'Kép → DexiNed + HED professzionális vékony vonalrajz',
       isStencil: false,
       drawing: true
     });
@@ -423,7 +426,7 @@ export default function StencilTool({ lang }) {
       clearInterval(iv);
       setBusy(false); setStage('');
     }
-  }, [tab, file, description, imageUrl, widthMm, heightMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt]);
+  }, [tab, file, description, imageUrl, widthMm, heightMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt, drawingStyle]);
 
   
   function drawCross(ctx, x, y, half, lineWidth) {
@@ -630,6 +633,23 @@ export default function StencilTool({ lang }) {
                     <p className="mt-2 text-xs text-stone-500">PNG, JPG — AI kontúrrajz, tiszta vékony vonalakkal</p>
                   </>
                 )}
+              </div>
+              <div className="mt-5">
+                <span className="text-xs uppercase tracking-wider text-stone-500">AI feldolgozási mód</span>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={function () { setDrawingStyle('line'); }}
+                    className={'rounded-lg border px-3 py-3 text-left transition ' +
+                      (drawingStyle === 'line' ? 'border-amber-500 bg-amber-500/10 text-amber-300' : 'border-stone-800 text-stone-400 hover:border-stone-600')}>
+                    <span className="block text-sm font-medium">Vékony vonalrajz</span>
+                    <span className="mt-1 block text-[11px] text-stone-500">Tiszta, finom kontúrok · kevés zaj</span>
+                  </button>
+                  <button type="button" onClick={function () { setDrawingStyle('stencil'); }}
+                    className={'rounded-lg border px-3 py-3 text-left transition ' +
+                      (drawingStyle === 'stencil' ? 'border-amber-500 bg-amber-500/10 text-amber-300' : 'border-stone-800 text-stone-400 hover:border-stone-600')}>
+                    <span className="block text-sm font-medium">Tetováló stencil</span>
+                    <span className="mt-1 block text-[11px] text-stone-500">Több használható részlet · transferre optimalizálva</span>
+                  </button>
+                </div>
               </div>
               <label className="mt-5 block">
                 <span className="text-xs uppercase tracking-wider text-stone-500">Opcionális finomító prompt</span>
@@ -932,7 +952,7 @@ export default function StencilTool({ lang }) {
                     <Stat label="Minőség" value={r ? r.quality : '—'} tone={qualityTone || 'ok'} />
                   </div>
                   <p className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3 text-sm text-stone-300">
-                    AI-alapú professzionális kontúrrajz: DexiNed + HED élkivonás, adaptív részletválogatás és 1-pixeles skeleton/thinning.
+                    AI-alapú professzionális kontúrrajz: DexiNed + HED élkivonás, adaptív részletválogatás és 1-pixeles skeleton/thinning. A kiválasztott profil külön szabályozza a vonalsűrűséget.
                   </p>
                   <a href={result.url} download={'inkforge-' + (title || 'ai-kep') + '.png'}
                     className="btn3d mt-5 block w-full !py-3.5 text-center">AI ceruzarajz letöltése</a>

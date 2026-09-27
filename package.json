@@ -2,12 +2,10 @@
   "name": "inkforge",
   "version": "0.1.0",
   "private": true,
-  "description": "InkForge – tattoo stencil platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
     "next": "14.2.35",

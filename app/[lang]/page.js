@@ -28,10 +28,38 @@ const S = {
     d3t: 'Higher basket value', d3x: 'Whoever designs a stencil sees your catalogue.',
     dIntro: 'List your catalogue. Free listing, orders come to you.',
     dCta: 'Application', foot: 'Processing runs in your browser.'
+  },
+  de: {
+    title: 'Von der Idee zur sauberen Schablone',
+    sub: 'Die eigene Stencil-Werkstatt deines Studios. Druckfertige Schablonen mit exakter Millimetergrosse.',
+    ctas: 'Stencil erstellen', ctam: 'Marktplatz entdecken',
+    n1: 'Stencil', n2: 'Marktplatz', n3: 'Studios', n4: 'Artists', n5: 'Fur Handler', n6: 'Kontakt', login: 'Anmelden',
+    p1t: 'Stencil-Design', p1x: 'Das Einzige, was wir selbst machen. Vom Bild zur druckfertigen Schablone.',
+    p2t: 'Marktplatz', p2x: 'Produkte von Handlern an einem Ort - von Nadeln bis Stuhlen.',
+    p3t: 'Studios und Artists', p3x: 'Profilseiten: Arbeiten, Videos, Stile, Kontakt.',
+    d1t: 'Kein Lager, keine Logistik', d1x: 'Software und Verbindung. Kein Bestand, kein Versand.',
+    d2t: 'Bestellungen gehen an dich', d2x: 'Der Kaufer bestellt, du erfullst zu deinen Bedingungen.',
+    d3t: 'Hoherer Warenkorbwert', d3x: 'Wer eine Schablone entwirft, sieht dein Sortiment.',
+    dIntro: 'Stelle dein Sortiment ein. Kostenlos, Bestellungen kommen zu dir.',
+    dCta: 'Bewerbung', foot: 'Die Verarbeitung lauft in deinem Browser.'
+  },
+  pl: {
+    title: 'Od pomyslu do czystego szablonu',
+    sub: 'Wlasny warsztat szablonow twojego studia. Gotowe do druku szablony z dokladnym wymiarem.',
+    ctas: 'Utworz szablon', ctam: 'Odkryj marketplace',
+    n1: 'Szablon', n2: 'Marketplace', n3: 'Studia', n4: 'Artysci', n5: 'Dla dystrybutorow', n6: 'Kontakt', login: 'Zaloguj',
+    p1t: 'Projektowanie szablonow', p1x: 'Jedyne, co robimy sami. Od obrazu do gotowego szablonu.',
+    p2t: 'Marketplace', p2x: 'Produkty dystrybutorow w jednym miejscu - od igiel do krzesel.',
+    p3t: 'Studia i artysci', p3x: 'Profile: prace, filmy, style, kontakt.',
+    d1t: 'Bez magazynu, bez logistyki', d1x: 'Software i kontakt. Bez zapasow, bez wysylki.',
+    d2t: 'Zamowienia trafiaja do ciebie', d2x: 'Klient zamawia, ty realizujesz na swoich warunkach.',
+    d3t: 'Wieksza wartosc koszyka', d3x: 'Kto projektuje szablon, widzi twoja oferte.',
+    dIntro: 'Wystaw swoja oferte. Darmowe, zamowienia trafiaja do ciebie.',
+    dCta: 'Zgloszenie', foot: 'Przetwarzanie dziala w twojej przegladarce.'
   }
 };
 
-const CODES = ['hu','en','de','fr','es','it','pt','nl','pl','cs','sk','ro','tr','ru','ja','ko','zh','th','ar','he'];
+const CODES = ['hu','en','de','pl'];
 
 export function generateStaticParams() {
   return CODES.map(function (lang) { return { lang: lang }; });
@@ -40,7 +68,6 @@ export function generateStaticParams() {
 export default function HomePage({ params }) {
   const lang = (params && params.lang) || 'hu';
   const t = S[lang] || S.hu;
-  const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
 
   const nav = [
     ['stencil', t.n1], ['piacter', t.n2], ['studiok', t.n3],
@@ -54,10 +81,10 @@ export default function HomePage({ params }) {
   const tiles = [[t.d1t, t.d1x], [t.d2t, t.d2x], [t.d3t, t.d3x]];
 
   return (
-    <div dir={dir} lang={lang}>
+    <div lang={lang}>
       <nav className="sticky top-0 z-40 border-b border-stone-800 bg-stone-950/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-3">
-          <a href={'/' + lang}><img src="/inkforge-logo.png" alt="InkForge" className="h-8 w-auto" /></a>
+          <a href={'/' + lang}><img src="/inkforge-logo.png" alt="InkForge" className="h-9 w-auto" /></a>
           <div className="ms-auto hidden items-center gap-1 lg:flex">
             {nav.map(function (it) {
               return <a key={it[0]} href={'/' + lang + '/' + it[0]} className="rounded-lg px-3 py-2 text-sm text-stone-300 hover:bg-stone-800 hover:text-amber-400">{it[1]}</a>;
@@ -65,9 +92,9 @@ export default function HomePage({ params }) {
           </div>
           <div className="ms-auto flex items-center gap-2 lg:ms-2">
             <a href={'/' + lang + '/belepes'} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-stone-950 hover:bg-amber-400">{t.login}</a>
-            <span className="hidden rounded-lg border border-stone-700 px-2 py-1.5 text-[10px] text-stone-500 sm:inline-block">
+            <span className="hidden rounded-lg border border-stone-700 px-1.5 py-1 text-[10px] text-stone-500 sm:inline-block">
               {CODES.map(function (c) {
-                return <a key={c} href={'/' + c} className={c === lang ? 'text-amber-400' : 'text-stone-500'}>{c.toUpperCase()}&nbsp;</a>;
+                return <a key={c} href={'/' + c} className={c === lang ? 'text-amber-400' : 'text-stone-500'}>{c.toUpperCase()} </a>;
               })}
             </span>
           </div>
@@ -76,14 +103,20 @@ export default function HomePage({ params }) {
 
       <main className="min-h-screen">
         <header className="relative w-full overflow-hidden">
-          <img src="/fejlec-800.png" alt="InkForge" className="w-full h-auto block" />
-          <div className="absolute bottom-0 start-0 end-0 px-6 pb-6 sm:pb-10">
+          <img
+            src="/fejlec-800.png"
+            srcSet="/fejlec-800.png 800w, /fejlec-1200.png 1200w, /fejlec-1600-tiszta.png 1600w, /fejlec-1920.png 1920w"
+            sizes="100vw"
+            alt="InkForge"
+            className="w-full h-auto block"
+          />
+          <div className="absolute bottom-0 start-0 end-0 bg-gradient-to-t from-stone-950 via-stone-950/70 to-transparent px-6 pb-6 pt-20 sm:pb-10">
             <div className="mx-auto max-w-6xl">
-              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white drop-shadow-lg">{t.title}</h1>
-              <p className="mt-2 max-w-2xl text-sm sm:text-base text-stone-300 drop-shadow">{t.sub}</p>
+              <h1 className="text-2xl font-bold tracking-tight text-white drop-shadow-lg sm:text-4xl">{t.title}</h1>
+              <p className="mt-2 max-w-2xl text-sm text-stone-200 drop-shadow sm:text-base">{t.sub}</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 <a href={'/' + lang + '/stencil'} className="rounded-lg bg-amber-500 px-5 py-2.5 font-semibold text-stone-950 hover:bg-amber-400">{t.ctas}</a>
-                <a href={'/' + lang + '/piacter'} className="rounded-lg border border-stone-500 px-5 py-2.5 font-semibold text-stone-200 hover:border-amber-500 hover:text-amber-400">{t.ctam}</a>
+                <a href={'/' + lang + '/piacter'} className="rounded-lg border border-stone-400 px-5 py-2.5 font-semibold text-white hover:border-amber-500 hover:text-amber-400">{t.ctam}</a>
               </div>
             </div>
           </div>

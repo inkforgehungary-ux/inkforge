@@ -158,12 +158,20 @@ export default function StencilTool({ lang }) {
       generatedUrl: null,
       report: null,
       print: null,
+      report: {
+        branchUsed: extra && extra.model ? extra.model : 'DexiNed + HED',
+        bridges: 0,
+        islands: Number(extra && extra.islands || 0),
+        coverage: Number(extra && extra.coverage || 0),
+        quality: extra && extra.quality ? extra.quality : 'hasznalhato',
+        verdictText: extra && extra.verdictText ? extra.verdictText : 'AI kontúrrajz elkészült.'
+      },
       gpu: {
         ms: Number(extra && extra.gpuMs || 0),
         engine: extra && extra.engine ? extra.engine : 'InkForge RunPod'
       },
-      gpuCoverage: null,
-      prompt: 'Kép → vékony vonalas rajz',
+      gpuCoverage: Number(extra && extra.coverage || 0),
+      prompt: 'Kép → DexiNed + HED professzionális kontúrrajz',
       isStencil: false,
       drawing: true
     });
@@ -600,9 +608,9 @@ export default function StencilTool({ lang }) {
           {tab === 'drawing' && (
             <div className="card3d p-6">
               <div className="mb-5">
-                <span className="text-xs uppercase tracking-wider text-stone-500">Vékony ceruzarajz</span>
+                <span className="text-xs uppercase tracking-wider text-stone-500">AI ceruzarajz · DexiNed + HED</span>
                 <p className="mt-2 text-sm text-stone-300">
-                  A képből csak a lényeg marad: vékony, tiszta kontúrvonalak. Nincs árnyék, nincs kitöltés, nincs extra részlet.
+                  AI-alapú kontúrkinyerés: DexiNed + HED, majd adaptív tisztítás és 1-pixeles vonalvékonyítás. A cél tiszta, tetováláshoz használható vonalrajz.
                 </p>
               </div>
               <div onDragOver={function (e) { e.preventDefault(); setDrag(true); }}
@@ -619,7 +627,7 @@ export default function StencilTool({ lang }) {
                   <>
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center border border-amber-700/60 text-2xl text-amber-500">+</div>
                     <p className="text-stone-200">Húzd ide a képet, vagy kattints</p>
-                    <p className="mt-2 text-xs text-stone-500">PNG, JPG — vékony ceruzás kontúrrajz</p>
+                    <p className="mt-2 text-xs text-stone-500">PNG, JPG — AI kontúrrajz, tiszta vékony vonalakkal</p>
                   </>
                 )}
               </div>

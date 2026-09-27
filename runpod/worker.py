@@ -343,6 +343,65 @@ def _professional_line_drawing(pil: Image.Image) -> np.ndarray:
     return out
 
 
+def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndarray:
+    """DexiNed + HED tattoo line art with separate drawing/stencil profiles."""
+    rgb = np.array(pil.convert("RGB"))
+    h, w = rgb.shape[:2]
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.createCLAHE(
+        clipLimit=1.5 if style == "line" else 1.9,
+        tileGridSize=(8, 8)
+    ).apply(gray)
+    gray = cv2.bilateralFilter(gray, 7, 28 if style == "line" else 35, 28 if style == "line" else 35)
+
+    dexi = _dexined_edges(pil)
+    hed = _hed_edges(pil)
+    score = (0.72 * dexi) + (0.28 * hed)
+
+    # Line mode keeps fewer, cleaner structural contours.
+    # Stencil mode retains a controlled amount of additional tattoo detail.
+    percentile = 78.0 if style == "line" else 69.0
+    min_threshold = 0.30 if style == "line" else 0.23
+    max_threshold = 0.52 if style == "line" else 0.45
+    threshold = float(np.clip(np.percentile(score, percentile), min_threshold, max_threshold))
+
+    strong = (score >= threshold).astype(np.uint8) * 255
+
+    grad_low = 75 if style == "line" else 60
+    grad_high = 155 if style == "line" else 140
+    grad = cv2.Canny(gray, grad_low, grad_high, apertureSize=3, L2gradient=True)
+
+    detail_threshold = max(0.44, threshold + (0.08 if style == "line" else 0.045))
+    detail = ((score >= detail_threshold).astype(np.uint8) * 255)
+    supported_detail = cv2.bitwise_and(detail, grad)
+    mask = cv2.bitwise_or(strong, supported_detail)
+
+    # Stencil mode gets a tiny closing pass so transfer lines don't break.
+    if style == "stencil":
+        mask = cv2.morphologyEx(
+            mask, cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        )
+
+    mask = _thin_mask(mask)
+    mask = _remove_border_components(mask)
+
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    out = np.zeros_like(mask)
+    min_area = max(10, int(h * w * (0.000010 if style == "line" else 0.000007)))
+    max_area = int(h * w * (0.10 if style == "line" else 0.14))
+
+    for idx in range(1, num):
+        area = int(stats[idx, cv2.CC_STAT_AREA])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        min_length = 24 if style == "line" else 18
+        if min_area <= area <= max_area and (max(bw, bh) >= min_length or area >= 24):
+            out[labels == idx] = 255
+
+    return out
+
+
 def _pencil_line_drawing(pil: Image.Image) -> np.ndarray:
     """Deterministic pencil/contour drawing: only essential thin black lines, no filled regions."""
     rgb = np.array(pil.convert("RGB"))
@@ -505,13 +564,17 @@ def handler(job: dict):
         )
 
     if mode == "image_to_drawing":
-        mask = _professional_line_drawing(source)
+        drawing_style = str(inp.get("style") or "line").strip().lower()
+        if drawing_style not in ("line", "stencil"):
+            drawing_style = "line"
+        mask = _professional_line_drawing(source, drawing_style)
         coverage, islands, quality, verdict = _metrics(mask)
         stencil_b64 = _mask_png(mask)
         return {
             "ok": True,
             "engine": ENGINE_VERSION,
             "mode": mode,
+            "style": drawing_style,
             "width": int(mask.shape[1]),
             "height": int(mask.shape[0]),
             "generated_png_base64": stencil_b64,
@@ -524,6 +587,7 @@ def handler(job: dict):
             "verdictText": verdict,
             "seed": seed,
             "model": "DexiNed + HED + adaptive contour thinning",
+            "style": drawing_style,
             "gpu_ms": int((time.time() - started) * 1000),
         }
 

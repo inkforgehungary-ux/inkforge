@@ -229,8 +229,6 @@ def _generate_img2img(source: Image.Image, prompt: str, negative: str, width: in
             negative_prompt=negative or LINEART_NEGATIVE,
             image=source,
             strength=max(0.15, min(0.85, strength)),
-            width=width,
-            height=height,
             num_inference_steps=steps,
             guidance_scale=guidance,
             generator=generator,

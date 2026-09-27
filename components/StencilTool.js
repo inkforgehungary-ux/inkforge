@@ -918,10 +918,10 @@ export default function StencilTool({ lang }) {
               ) : (
                 <>
                   <p className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3 text-sm text-stone-300">
-                    Ez egy közvetlen AI kép. A stencil mód helyett a generált képet kaptad vissza.
+                    Ez egy tiszta, vékony ceruzás kontúrrajz: csak a lényegi vonalak maradtak meg.
                   </p>
                   <a href={result.url} download={'inkforge-' + (title || 'ai-kep') + '.png'}
-                    className="btn3d mt-5 block w-full !py-3.5 text-center">AI kép letöltése</a>
+                    className="btn3d mt-5 block w-full !py-3.5 text-center">Ceruzarajz letöltése</a>
                 </>
               )}
             </div>

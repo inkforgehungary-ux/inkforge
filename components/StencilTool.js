@@ -503,12 +503,12 @@ export default function StencilTool({ lang }) {
     setInfo('Kész: ' + layout.pageCount + ' A4 lap.');
   }
 
+  const r = result && result.report;
+  const p = result && result.print;
+
   const a4Layout = result && result.isStencil !== false && p
     ? calculateA4Layout(p.widthMm, p.heightMm, { orientation: 'auto', marginMm: 5, overlapMm: 8 })
     : null;
-
-  const r = result && result.report;
-  const p = result && result.print;
   const stageLabel = useMemo(function () {
     if (stage === 'generating') return 'Minta generalasa...';
     if (stage === 'converting') return 'Stencil keszitese...';

@@ -1,14 +1,8 @@
-import { getDictionary, makeT, getFontClass } from '../lib/i18n/config';
 import Nav from './Nav';
-import HomeContent from './HomeContent';
 
-export default function LocaleShell({ lang, children }) {
-  const t = makeT(getDictionary(lang));
-  const fontClass = getFontClass(lang);
-  const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
-
+export default function LocaleShell({ lang, t, children }) {
   return (
-    <div className={fontClass} dir={dir} lang={lang}>
+    <>
       <Nav lang={lang} t={t} />
       {children}
       <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
@@ -17,6 +11,6 @@ export default function LocaleShell({ lang, children }) {
           <span>{t('footer.note')}</span>
         </div>
       </footer>
-    </div>
+    </>
   );
 }

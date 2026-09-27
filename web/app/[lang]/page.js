@@ -1,19 +1,18 @@
-import { getDictionary, makeT, getFontClass } from '../lib/i18n/config';
-import Nav from '../components/Nav';
-import HomeContent from '../components/HomeContent';
-
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return [{ lang: 'hu' }, { lang: 'en' }, { lang: 'de' }, { lang: 'ar' }];
-}
+import { getDictionary, makeT, getFontClass, LOCALE_CODES } from '../../lib/i18n/config';
+import LocaleShell from '../../../components/LocaleShell';
+import HomeContent from '../../../components/HomeContent';
 
 export function generateMetadata({ params }) {
   const t = makeT(getDictionary(params.lang));
-  return { title: 'InkForge – ' + t('home.tagline') };
+  const languages = {};
+  for (const c of LOCALE_CODES) languages[c] = '/' + c;
+  return {
+    title: 'InkForge – ' + t('home.tagline'),
+    alternates: { canonical: '/' + params.lang, languages },
+  };
 }
 
-export default function LangHomePage({ params }) {
+export default function HomePage({ params }) {
   const lang = params.lang;
   const t = makeT(getDictionary(lang));
   const fontClass = getFontClass(lang);
@@ -21,14 +20,9 @@ export default function LangHomePage({ params }) {
 
   return (
     <div className={fontClass} dir={dir} lang={lang}>
-      <Nav lang={lang} t={t} />
-      <HomeContent t={t} lang={lang} />
-      <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-          <span>InkForge · Tattoo Stencil Platform · B2B</span>
-          <span>{t('footer.note')}</span>
-        </div>
-      </footer>
+      <LocaleShell lang={lang} t={t}>
+        <HomeContent t={t} lang={lang} />
+      </LocaleShell>
     </div>
   );
 }

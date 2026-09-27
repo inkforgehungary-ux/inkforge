@@ -1,5 +1,3 @@
-import { getDictionary, makeT } from '../lib/i18n/config';
-
 export default function HomeContent({ t, lang }) {
   return (
     <main className="min-h-screen">

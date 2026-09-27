@@ -1,4 +1,5 @@
 // INKFORGE — ENGINE HEALTH
+// Utvonal: app/api/stencil/health/route.js -> ../../../../lib/
 // GET /api/stencil/health — melyik motor el?
 
 export async function GET() {

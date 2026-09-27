@@ -1,23 +1,14 @@
-// ============================================================
 // INKFORGE — SZOVEGBOL KEP ES STENCIL
 // POST /api/stencil/from-text
-//
-// A vevo leirja, mit akar:
-//   "koponya szarnyakkal, alatta szalag, a szalagon PRO PATRIA"
-//
-// 1) prompt epites (a leiras + stencil-stilus)
-// 2) Runpod: text-to-image -> kesz kep
-// 3) Runpod: image-to-image -> vonalas stencil
-// 4) mentes: stencils (source_type='ai', source_prompt), credit_ledger
-// ============================================================
+// Utvonal: app/api/stencil/from-text/route.js -> ../../../../lib/
 
-import { enqueue, jobStatus, jobResult, queueStats } from '../../../lib/queue.js';
-import { runpodText, runpodLineart, runpodReady } from '../../../lib/runpod-client.js';
-import { buildPromptFromDescription, styleTail } from '../../../lib/prompt.js';
+import { enqueue, jobStatus, jobResult, queueStats } from '../../../../lib/queue.js';
+import { runpodText, runpodLineart, runpodReady } from '../../../../lib/runpod-client.js';
+import { buildPromptFromDescription, styleTail } from '../../../../lib/prompt.js';
 import {
   stencilInsertRow, stencilUpdateRow, creditEntry,
   buildNames, storagePaths, BUCKET, CREDIT_COST, STATUS, costUsd
-} from '../../../lib/save.js';
+} from '../../../../lib/save.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -75,7 +66,7 @@ async function sbUpload(path, bytes, contentType) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const userId = body.user_id;
+    const userId = body.user_id || null;
     const studioId = body.studio_id || null;
     const description = String(body.description || '').trim();
     const styleSlug = body.style_slug || 'linework';
@@ -85,9 +76,6 @@ export async function POST(req) {
     const bodyPart = body.body_part || null;
     const title = String(body.title || description || 'ai-minta').slice(0, 80);
 
-    if (!userId) {
-      return Response.json({ ok: false, error: 'Hianyzo user_id.' }, { status: 400 });
-    }
     if (description.length < 4) {
       return Response.json({ ok: false, error: 'Irj le, mit abrazoljon (par szo eleg).' }, { status: 400 });
     }
@@ -105,7 +93,6 @@ export async function POST(req) {
       detail: body.detail === true
     });
 
-    // Kezdo sor: queued, source_type = 'ai'
     const created = await sbInsert('stencils', stencilInsertRow({
       userId: userId, studioId: studioId,
       title: title,
@@ -120,14 +107,12 @@ export async function POST(req) {
 
       const t0 = Date.now();
       try {
-        // 1) KEP generalasa a leirasbol
         const gen = await runpodText({
           prompt: built.prompt,
           negative: built.negative,
           count: count
         });
 
-        // 2) STENCIL a generalt kepbol
         const conv = await runpodLineart(gen.imageBlob || gen.imageUrl, {
           mode: 'lineart', maxDim: 2000,
           targetCoverage: 0.06, bridges: true, bridgeWidth: 2
@@ -155,9 +140,7 @@ export async function POST(req) {
         }
 
         if (studioId) {
-          await sbInsert('credit_ledger', creditEntry(
-            studioId, 'stencil_generate_ai', CREDIT_COST.generate_hd
-          ));
+          await sbInsert('credit_ledger', creditEntry(studioId, 'stencil_generate_ai', CREDIT_COST.generate_hd));
         }
 
         return {
@@ -182,13 +165,9 @@ export async function POST(req) {
     }, { mode: 'ai-text', description: description });
 
     return Response.json({
-      ok: true,
-      jobId: jobId,
-      stencilId: stencilId,
-      prompt: built.prompt,
-      embeddedText: built.embeddedText,
-      style: styleSlug,
-      queue: queueStats()
+      ok: true, jobId: jobId, stencilId: stencilId,
+      prompt: built.prompt, embeddedText: built.embeddedText,
+      style: styleSlug, queue: queueStats()
     });
   } catch (e) {
     return Response.json({ ok: false, error: String(e && e.message ? e.message : e) }, { status: 500 });

@@ -1,14 +1,14 @@
-// INKFORGE — STENCIL KEP LINKBOL
+// INKFORGE — KEP LINKBOL
 // POST /api/stencil/from-url
-// 1) URL ellenorzes (SSRF vedelem)  2) letoltes  3) Runpod stencil  4) mentes
+// Utvonal: app/api/stencil/from-url/route.js -> ../../../../lib/
 
-import { enqueue, jobStatus, jobResult, queueStats } from '../../../lib/queue.js';
-import { fetchImage, checkUrl } from '../../../lib/image-url.js';
-import { runpodLineart, runpodReady } from '../../../lib/runpod-client.js';
+import { enqueue, jobStatus, jobResult, queueStats } from '../../../../lib/queue.js';
+import { fetchImage, checkUrl } from '../../../../lib/image-url.js';
+import { runpodLineart, runpodReady } from '../../../../lib/runpod-client.js';
 import {
   stencilInsertRow, stencilUpdateRow, creditEntry,
   buildNames, storagePaths, BUCKET, CREDIT_COST, STATUS, costUsd
-} from '../../../lib/save.js';
+} from '../../../../lib/save.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -89,9 +89,7 @@ export async function POST(req) {
 
     const created = await sbInsert('stencils', stencilInsertRow({
       userId: userId, studioId: studioId,
-      title: title,
-      sourceType: 'url',
-      sourcePath: check.url,
+      title: title, sourceType: 'url', sourcePath: check.url,
       widthMm: widthMm, heightMm: null, dpi: dpi,
       lineWeight: lineWeight, bridgeWidth: bridgePx
     }));
@@ -103,13 +101,11 @@ export async function POST(req) {
       try {
         const got = await fetchImage(check.url);
         const blob = new Blob([got.bytes], { type: got.contentType });
-
         const conv = await runpodLineart(blob, {
           mode: 'lineart', maxDim: 2000,
           targetCoverage: targetCoverage,
           bridges: true, bridgeWidth: Math.round(bridgePx)
         });
-
         const totalMs = Date.now() - t0;
         const gpuMs = conv.ms || totalMs;
         const heightMm = Math.round(widthMm * conv.height / conv.width * 100) / 100;
@@ -121,27 +117,21 @@ export async function POST(req) {
 
         if (stencilId) {
           await sbPatch('stencils', stencilId, stencilUpdateRow({
-            status: STATUS.ready,
-            branchUsed: 'runpod-url',
-            coverage: conv.coverage,
-            previewPath: pngPath,
-            gpuMs: gpuMs
+            status: STATUS.ready, branchUsed: 'runpod-url',
+            coverage: conv.coverage, previewPath: pngPath, gpuMs: gpuMs
           }));
         }
-
         if (studioId) {
           await sbInsert('credit_ledger', creditEntry(studioId, 'stencil_generate_url', CREDIT_COST.generate));
         }
 
         return {
-          id: stencilId,
-          source_url: check.url,
+          id: stencilId, source_url: check.url,
           png_base64: conv.png_base64,
           width: conv.width, height: conv.height, height_mm: heightMm,
           coverage: conv.coverage, quality: conv.quality,
           bridges: conv.bridges, islands: conv.islands,
-          ms: totalMs, gpuMs: gpuMs,
-          aiCostUsd: costUsd(gpuMs),
+          ms: totalMs, gpuMs: gpuMs, aiCostUsd: costUsd(gpuMs),
           stored: { png: pngPath, source: srcPath }
         };
       } catch (e) {

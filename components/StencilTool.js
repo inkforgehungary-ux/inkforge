@@ -311,20 +311,32 @@ export default function StencilTool({ lang }) {
       if (tab === 'text') {
         if (description.trim().length < 4) throw new Error('Irj le, mit abrazoljon.');
         setStage('generating');
-        const res = await fetch('/api/stencil/from-text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            description: description.trim(),
-            style_slug: styleSlug,
-            body_part: bodyPart || null,
-            width_mm: widthMm, height_mm: heightMm, dpi: dpi,
-            title: title || description.trim().slice(0, 60),
-            mode: textMode
-          })
-        });
-        const out = await res.json();
-        if (!out.ok) throw new Error(out.error || 'Hiba');
+        let res;
+        let out;
+        try {
+          res = await fetch('/api/stencil/from-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+              description: description.trim(),
+              style_slug: styleSlug,
+              body_part: bodyPart || null,
+              width_mm: widthMm, height_mm: heightMm, dpi: dpi,
+              title: title || description.trim().slice(0, 60),
+              mode: textMode
+            })
+          });
+        } catch (networkError) {
+          throw new Error('Az InkForge API nem érhető el. Ellenőrizd, hogy a legfrissebb Vercel deployment fut-e. Részlet: ' + (networkError && networkError.message ? networkError.message : 'hálózati hiba'));
+        }
+
+        const raw = await res.text().catch(function () { return ''; });
+        try { out = raw ? JSON.parse(raw) : {}; } catch (_) {
+          throw new Error('Az InkForge API nem JSON választ adott (HTTP ' + res.status + ').');
+        }
+        if (!res.ok || !out.ok) {
+          throw new Error(out.error || ('InkForge API hiba: HTTP ' + res.status));
+        }
         if (out.embeddedText) setInfo('Felismerve: ' + out.embeddedText);
 
         const done = await waitRunpod('/api/stencil/from-text', out);

@@ -2,7 +2,7 @@
 // Egyetlen olcso health-check: /health. Nem inditunk /run vagy /runsync tesztjobot.
 
 export async function GET() {
-  const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
+  const stencilUrl = process.env.RUNPOD_STENCIL_URL || process.env.RUNPOD_TEXT_URL || null;
   const textUrl = process.env.RUNPOD_TEXT_URL || process.env.RUNPOD_STENCIL_URL || null;
   const key = process.env.RUNPOD_API_KEY || '';
   const hasKey = !!key;

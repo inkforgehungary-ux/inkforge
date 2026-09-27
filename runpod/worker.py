@@ -19,7 +19,7 @@ import runpod
 from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 
-ENGINE_VERSION = "3.0.0"
+ENGINE_VERSION = "3.1.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
 DEFAULT_SIZE = int(os.getenv("RUNPOD_DEFAULT_SIZE", "768"))
 DEFAULT_STEPS = int(os.getenv("RUNPOD_DEFAULT_STEPS", "22"))
@@ -200,6 +200,51 @@ def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
     # Never dilate: output is intentionally a one-pixel line stencil.
     return out
 
+def _pencil_line_drawing(pil: Image.Image) -> np.ndarray:
+    """Deterministic pencil/contour drawing: only essential thin black lines, no filled regions."""
+    rgb = np.array(pil.convert("RGB"))
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+
+    # Flatten lighting and suppress photo texture before extracting contours.
+    clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
+    gray = cv2.bilateralFilter(gray, 7, 35, 35)
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    # Conservative Canny: keeps strong structure while rejecting fine photographic noise.
+    edges = cv2.Canny(gray, 80, 170, apertureSize=3, L2gradient=True)
+    edges = cv2.morphologyEx(
+        edges,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
+    edges = cv2.morphologyEx(
+        edges,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
+
+    # One-pixel skeleton — never thicken the result.
+    thin = _thin_mask(edges)
+
+    # Remove isolated speckles and very large photographic regions.
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(thin, connectivity=8)
+    out = np.zeros_like(thin)
+    h, w = thin.shape
+    min_area = max(10, int(h * w * 0.000012))
+    max_area = int(h * w * 0.12)
+    for idx in range(1, num):
+        area = int(stats[idx, cv2.CC_STAT_AREA])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        if area < min_area or area > max_area:
+            continue
+        # Preserve long contours but reject tiny isolated dots/noise.
+        if max(bw, bh) >= 18 or area >= 18:
+            out[labels == idx] = 255
+
+    return out
+
 def _mask_png(mask: np.ndarray) -> str:
     h, w = mask.shape
     rgba = np.zeros((h, w, 4), dtype=np.uint8)
@@ -288,6 +333,7 @@ def handler(job: dict):
         "text_to_image",
         "image_to_image",
         "image_to_stencil",
+        "image_to_drawing",
         "text_to_stencil",
         "image_to_image_stencil",
     }:
@@ -314,6 +360,29 @@ def handler(job: dict):
             _decode_b64_image(str(inp.get("image_base64") or "")),
             max_side,
         )
+
+    if mode == "image_to_drawing":
+        mask = _pencil_line_drawing(source)
+        coverage, islands, quality, verdict = _metrics(mask)
+        stencil_b64 = _mask_png(mask)
+        return {
+            "ok": True,
+            "engine": ENGINE_VERSION,
+            "mode": mode,
+            "width": int(mask.shape[1]),
+            "height": int(mask.shape[0]),
+            "generated_png_base64": stencil_b64,
+            "png_base64": stencil_b64,
+            "stencil_png_base64": stencil_b64,
+            "coverage": coverage,
+            "bridges": 0,
+            "islands": islands,
+            "quality": quality,
+            "verdictText": verdict,
+            "seed": seed,
+            "model": "OpenCV-contour-pencil-v1",
+            "gpu_ms": int((time.time() - started) * 1000),
+        }
 
     if mode == "text_to_image":
         tw, th = _target_dimensions(inp, max_side)

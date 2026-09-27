@@ -820,7 +820,7 @@ export default function StencilTool({ lang }) {
 
             <button onClick={process} disabled={busy || (tab === 'upload' && !file)}
               className={'btn3d mt-6 w-full !py-4 ' + (busy || ((tab === 'upload' || tab === 'drawing') && !file) ? 'cursor-not-allowed opacity-40' : '')}>
-              {busy ? stageLabel : 'Stencil keszitese'}
+              {busy ? stageLabel : (tab === 'drawing' ? 'Rajz keszitese' : 'Stencil keszitese')}
             </button>
 
             {busy && elapsed > 0 && (

@@ -14,8 +14,9 @@
 //   A bongeszo-motor csak VESZTARTALEK, es ki is irja.
 
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { runStencil, previewURL } from '../lib/stencil-client';
-import { maskToPNGBytes, downloadBlob } from '../lib/png-browser';
+import { runStencil, previewURL, maskToCanvas } from '../lib/stencil-client';
+import { canvasToPNGBytes, downloadBlob } from '../lib/png-browser';
+import { calculateA4Layout, mmToPx } from '../lib/print-layout';
 
 const STYLES = [
   { v: 'linework', label: 'Vonalas' },
@@ -68,6 +69,9 @@ export default function StencilTool({ lang }) {
   const inputRef = useRef(null);
 
   const [widthMm, setWidthMm] = useState(100);
+  const [heightMm, setHeightMm] = useState(100);
+  const [lockAspect, setLockAspect] = useState(true);
+  const [sourceAspect, setSourceAspect] = useState(1);
   const [dpi, setDpi] = useState(300);
   const [styleSlug, setStyleSlug] = useState('linework');
   const [bodyPart, setBodyPart] = useState('');
@@ -75,13 +79,42 @@ export default function StencilTool({ lang }) {
   const [imageMode, setImageMode] = useState('image_to_image_stencil');
   const [imagePrompt, setImagePrompt] = useState('');
   const [textMode, setTextMode] = useState('text_to_stencil');
+  function setTargetWidth(value) {
+    const v = Math.max(20, Math.min(700, Number(value) || 20));
+    setWidthMm(v);
+    if (lockAspect) setHeightMm(Math.round(v * sourceAspect * 10) / 10);
+  }
+
+  function setTargetHeight(value) {
+    const v = Math.max(20, Math.min(1000, Number(value) || 20));
+    setHeightMm(v);
+    if (lockAspect && sourceAspect > 0) setWidthMm(Math.round(v / sourceAspect * 10) / 10);
+  }
+
+  function setBackPreset() {
+    setWidthMm(450);
+    setHeightMm(600);
+    setLockAspect(false);
+    setInfo('Teljes hát: 450 × 600 mm. Az A4 export automatikusan darabolja és illeszthető jeleket tesz minden lapra.');
+  }
 
   const onPick = useCallback(function (f) {
     if (!f) return;
     if (!f.type.startsWith('image/')) { setError('Csak kepfajl.'); return; }
     setError(''); setInfo(''); setResult(null);
-    setFile(f); setPreview(URL.createObjectURL(f));
-  }, []);
+    const objectUrl = URL.createObjectURL(f);
+    setFile(f); setPreview(objectUrl);
+
+    const img = new Image();
+    img.onload = function () {
+      const ratio = (img.naturalHeight || img.height || 1) / Math.max(1, img.naturalWidth || img.width || 1);
+      setSourceAspect(ratio);
+      if (lockAspect) setHeightMm(Math.round(widthMm * ratio * 10) / 10);
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.onerror = function () { URL.revokeObjectURL(objectUrl); };
+    img.src = objectUrl;
+  }, [lockAspect, widthMm]);
 
   const onDrop = useCallback(function (e) {
     e.preventDefault(); setDrag(false);
@@ -128,9 +161,14 @@ export default function StencilTool({ lang }) {
     const coverage = extra && extra.coverage != null
       ? Number(extra.coverage)
       : Math.round((ink / Math.max(1, mask.length)) * 10000) / 100;
-    const heightMm = extra && extra.heightMm != null
+    const measuredHeightMm = extra && extra.heightMm != null
       ? Number(extra.heightMm)
       : Math.round(widthMm * h / Math.max(1, w) * 100) / 100;
+    const effectiveHeightMm = lockAspect
+      ? Math.round(widthMm * h / Math.max(1, w) * 10) / 10
+      : measuredHeightMm;
+    setSourceAspect(h / Math.max(1, w));
+    setHeightMm(effectiveHeightMm);
     const pxPerMm = dpi / 25.4;
 
     let generatedUrl = null;
@@ -182,6 +220,7 @@ export default function StencilTool({ lang }) {
     if (out.stencilId) qs.set('stencil', out.stencilId);
     if (out.studioId) qs.set('studio', out.studioId);
     if (out.widthMm) qs.set('mm', out.widthMm);
+    if (out.heightMm) qs.set('hmm', out.heightMm);
     if (out.dpi) qs.set('dpi', out.dpi);
 
     for (let i = 0; i < 300; i++) {
@@ -228,9 +267,10 @@ export default function StencilTool({ lang }) {
     fd.append('image', uploadFile);
     fd.append('mode', imageMode);
     fd.append('target_coverage', '0.06');
-    fd.append('max_dim', '768');
+    fd.append('max_dim', '1024');
     fd.append('strength', '0.38');
     fd.append('width_mm', String(widthMm));
+    fd.append('height_mm', String(heightMm));
     fd.append('dpi', String(dpi));
     fd.append('title', title || (f.name || 'stencil').replace(/\.[^.]+$/, ''));
     if (imagePrompt.trim()) fd.append('prompt', imagePrompt.trim());
@@ -264,7 +304,7 @@ export default function StencilTool({ lang }) {
             description: description.trim(),
             style_slug: styleSlug,
             body_part: bodyPart || null,
-            width_mm: widthMm, dpi: dpi,
+            width_mm: widthMm, height_mm: heightMm, dpi: dpi,
             title: title || description.trim().slice(0, 60),
             mode: textMode
           })
@@ -283,7 +323,7 @@ export default function StencilTool({ lang }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            url: imageUrl.trim(), width_mm: widthMm, dpi: dpi,
+            url: imageUrl.trim(), width_mm: widthMm, height_mm: heightMm, dpi: dpi,
             mode: imageMode,
             prompt: imagePrompt.trim(),
             target_coverage: 0.06, title: title || 'link-minta'
@@ -305,7 +345,153 @@ export default function StencilTool({ lang }) {
       clearInterval(iv);
       setBusy(false); setStage('');
     }
-  }, [tab, file, description, imageUrl, widthMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt]);
+  }, [tab, file, description, imageUrl, widthMm, heightMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt]);
+
+  
+  function drawCross(ctx, x, y, half, lineWidth) {
+    ctx.save();
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    ctx.moveTo(x - half, y); ctx.lineTo(x + half, y);
+    ctx.moveTo(x, y - half); ctx.lineTo(x, y + half);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawA4Guides(ctx, layout, page, dpi) {
+    const s = mmToPx(1, dpi);
+    const left = mmToPx(layout.marginMm, dpi);
+    const top = mmToPx(layout.marginMm, dpi);
+    const right = mmToPx(layout.marginMm + layout.artWidthMm, dpi);
+    const bottom = mmToPx(layout.marginMm + layout.artHeightMm, dpi);
+    const guide = Math.max(1, mmToPx(0.25, dpi));
+    const cross = Math.max(4, mmToPx(2.5, dpi));
+
+    ctx.save();
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = guide;
+    ctx.setLineDash([Math.max(2, mmToPx(2, dpi)), Math.max(2, mmToPx(2, dpi))]);
+    ctx.strokeRect(left, top, right - left, bottom - top);
+    ctx.setLineDash([]);
+
+    drawCross(ctx, left, top, cross, guide);
+    drawCross(ctx, right, top, cross, guide);
+    drawCross(ctx, left, bottom, cross, guide);
+    drawCross(ctx, right, bottom, cross, guide);
+
+    if (page.col > 0) {
+      drawCross(ctx, left, (top + bottom) / 2, cross, guide);
+      ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, bottom); ctx.stroke();
+    }
+    if (page.col < layout.cols - 1) {
+      drawCross(ctx, right, (top + bottom) / 2, cross, guide);
+      ctx.beginPath(); ctx.moveTo(right, top); ctx.lineTo(right, bottom); ctx.stroke();
+    }
+    if (page.row > 0) {
+      drawCross(ctx, (left + right) / 2, top, cross, guide);
+      ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(right, top); ctx.stroke();
+    }
+    if (page.row < layout.rows - 1) {
+      drawCross(ctx, (left + right) / 2, bottom, cross, guide);
+      ctx.beginPath(); ctx.moveTo(left, bottom); ctx.lineTo(right, bottom); ctx.stroke();
+    }
+
+    ctx.fillStyle = '#111';
+    ctx.font = Math.max(12, mmToPx(3, dpi)) + 'px Arial';
+    ctx.fillText('INKFORGE PRO • A4 ' + (page.index + 1) + '/' + layout.pageCount, left, Math.max(mmToPx(3, dpi), top - mmToPx(1.5, dpi)));
+    ctx.font = Math.max(10, mmToPx(2.3, dpi)) + 'px Arial';
+    ctx.fillText(
+      layout.targetWidthMm.toFixed(1) + ' × ' + layout.targetHeightMm.toFixed(1) + ' mm • ' +
+      dpi + ' DPI • 100% / ACTUAL SIZE',
+      left,
+      ctx.canvas.height - mmToPx(2, dpi)
+    );
+    ctx.restore();
+  }
+
+  async function renderA4Tile(resultObj, layout, page, dpi) {
+    const canvas = document.createElement('canvas');
+    canvas.width = mmToPx(layout.pageWidthMm, dpi);
+    canvas.height = mmToPx(layout.pageHeightMm, dpi);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+
+    const source = maskToCanvas(resultObj.mask, resultObj.width, resultObj.height, false);
+    const sx = (page.xMm / layout.targetWidthMm) * resultObj.width;
+    const sy = (page.yMm / layout.targetHeightMm) * resultObj.height;
+    const sw = (page.cropWidthMm / layout.targetWidthMm) * resultObj.width;
+    const sh = (page.cropHeightMm / layout.targetHeightMm) * resultObj.height;
+    const dx = mmToPx(layout.marginMm, dpi);
+    const dy = mmToPx(layout.marginMm, dpi);
+    const dw = mmToPx(page.cropWidthMm, dpi);
+    const dh = mmToPx(page.cropHeightMm, dpi);
+
+    if (sw > 0 && sh > 0 && dw > 0 && dh > 0) {
+      ctx.drawImage(source, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+    drawA4Guides(ctx, layout, page, dpi);
+    return canvas;
+  }
+
+  async function downloadExactStencilPng() {
+    if (!result || result.isStencil === false) return;
+    const pxW = mmToPx(p.widthMm, p.dpi);
+    const pxH = mmToPx(p.heightMm, p.dpi);
+    const megaPixels = (pxW * pxH) / 1000000;
+    if (megaPixels > 60) throw new Error('A teljes méretű PNG ' + megaPixels.toFixed(0) + ' MP. Nagy mintánál használd az A4 PRO csomagot.');
+    const canvas = document.createElement('canvas');
+    canvas.width = pxW; canvas.height = pxH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, pxW, pxH);
+    ctx.imageSmoothingEnabled = false;
+    const source = maskToCanvas(result.mask, result.width, result.height, false);
+    ctx.drawImage(source, 0, 0, pxW, pxH);
+    const bytes = await canvasToPNGBytes(canvas, p.dpi);
+    downloadBlob(bytes, 'inkforge-' + (title || 'stencil') + '-' + p.widthMm + 'x' + p.heightMm + 'mm-' + p.dpi + 'dpi.png', 'image/png');
+  }
+
+  async function downloadA4Package() {
+    if (!result || result.isStencil === false) return;
+    const layout = calculateA4Layout(p.widthMm, p.heightMm, { orientation: 'auto', marginMm: 5, overlapMm: 8 });
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+    const safeTitle = (title || 'stencil').replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase() || 'stencil';
+
+    for (let i = 0; i < layout.pages.length; i++) {
+      const page = layout.pages[i];
+      setInfo('A4 lap ' + (i + 1) + '/' + layout.pageCount + ' készül…');
+      const canvas = await renderA4Tile(result, layout, page, p.dpi);
+      const bytes = await canvasToPNGBytes(canvas, p.dpi);
+      zip.file(safeTitle + '-A4-' + String(i + 1).padStart(2, '0') + '-of-' + String(layout.pageCount).padStart(2, '0') + '.png', bytes);
+      canvas.width = 1; canvas.height = 1;
+      await new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }
+
+    zip.file('NYOMTATASI-UTMUTATO.txt', [
+      'INKFORGE PRO STENCIL',
+      '',
+      'Valódi méret: ' + p.widthMm.toFixed(1) + ' × ' + p.heightMm.toFixed(1) + ' mm',
+      'Felbontás: ' + p.dpi + ' DPI',
+      'A4 lapok: ' + layout.pageCount + ' (' + layout.cols + ' × ' + layout.rows + ', ' + layout.orientation + ')',
+      'Illesztési átfedés: ' + layout.overlapMm.toFixed(1) + ' mm',
+      '',
+      'NYOMTATÁS: 100% / ACTUAL SIZE. FIT TO PAGE = KIKAPCSOLVA.',
+      'Az A4 lapokon azonosító és illesztési vonalak, valamint kis keresztjelek vannak.',
+      'A szomszédos lapokat az azonos él- és keresztjelekhez kell igazítani.'
+    ].join('\n'));
+
+    setInfo('A4 ZIP összeállítása…');
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    downloadBlob(new Uint8Array(await blob.arrayBuffer()), safeTitle + '-A4-stencil-' + p.dpi + 'dpi.zip', 'application/zip');
+    setInfo('Kész: ' + layout.pageCount + ' A4 lap.');
+  }
+
+  const a4Layout = result && result.isStencil !== false && p
+    ? calculateA4Layout(p.widthMm, p.heightMm, { orientation: 'auto', marginMm: 5, overlapMm: 8 })
+    : null;
 
   const r = result && result.report;
   const p = result && result.print;
@@ -479,8 +665,45 @@ export default function StencilTool({ lang }) {
                   </select>
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Szélesség</span>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input type="number" min="20" max="700" step="0.1" value={widthMm}
+                      onChange={function (e) { setTargetWidth(e.target.value); }}
+                      className="w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200" />
+                    <span className="text-xs text-stone-500">mm</span>
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="text-xs uppercase tracking-wider text-stone-500">Magasság</span>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input type="number" min="20" max="1000" step="0.1" value={heightMm}
+                      onChange={function (e) { setTargetHeight(e.target.value); }}
+                      className="w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200" />
+                    <span className="text-xs text-stone-500">mm</span>
+                  </div>
+                </label>
+              </div>
 
-              <Slider label="Szelesseg" value={widthMm} unit="mm" min={20} max={400} step={5} onChange={setWidthMm} />
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={setBackPreset}
+                  className="rounded-lg border border-amber-800/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 hover:border-amber-600">
+                  Teljes hát: 450 × 600 mm
+                </button>
+                <label className="flex items-center gap-2 text-xs text-stone-400">
+                  <input type="checkbox" checked={lockAspect}
+                    onChange={function (e) { setLockAspect(e.target.checked); }}
+                  />
+                  Aránytartás
+                </label>
+              </div>
+
+              {widthMm > 190 || heightMm > 277 ? (
+                <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-xs text-amber-300">
+                  Nagy minta: A4 lapokra darabolás, illesztési átfedés és regisztrációs keresztek automatikusan.
+                </div>
+              ) : null}
 
               <div>
                 <span className="text-xs uppercase tracking-wider text-stone-500">Minta neve</span>
@@ -536,7 +759,8 @@ export default function StencilTool({ lang }) {
 
               {result.isStencil !== false && (
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <Stat label="Mert meret" value={p.widthMm + ' x ' + p.heightMm + ' mm'} gold />
+                <Stat label="Méret" value={p.widthMm + ' × ' + p.heightMm + ' mm'} gold />
+                <Stat label="A4 lapok" value={a4Layout ? a4Layout.pageCount + ' (' + a4Layout.cols + '×' + a4Layout.rows + ')' : '—'} />
                 <Stat label="Raszter" value={p.px} />
                 <Stat label="px / mm" value={String(p.pxPerMm)} />
                 <Stat label="Fedettseg" value={r.coverage + '%'} />
@@ -572,11 +796,19 @@ export default function StencilTool({ lang }) {
                 <>
                   <button
                     onClick={async function () {
-                      const png = await maskToPNGBytes(result.mask, result.width, result.height, { transparent: true });
-                      downloadBlob(png, 'inkforge-' + (title || 'stencil') + '-' + p.widthMm + 'mm.png', 'image/png');
+                      try { await downloadExactStencilPng(); }
+                      catch (e) { setError(e && e.message ? e.message : 'PNG export hiba'); }
                     }}
-                    className="btn3d mt-5 w-full !py-3.5">PNG letöltése (átlátszó)</button>
-                  <p className="mt-3 text-xs leading-relaxed text-stone-500">Nyomtatás 100%-os méretben — kapcsold ki a Fit to page opciót.</p>
+                    className="btn3d mt-5 w-full !py-3.5">Teljes méretű stencil PNG</button>
+                  <button
+                    onClick={async function () {
+                      try { await downloadA4Package(); }
+                      catch (e) { setError(e && e.message ? e.message : 'A4 export hiba'); }
+                    }}
+                    className="btn3d mt-3 w-full !py-3.5 !bg-amber-500/10">PRO A4 nyomtatási csomag (ZIP)</button>
+                  <p className="mt-3 text-xs leading-relaxed text-stone-500">
+                    A4 lapokon illesztési vonalak, kis keresztek és oldalszám. Nyomtatás 100% / Actual size, Fit to page kikapcsolva.
+                  </p>
                 </>
               ) : (
                 <>

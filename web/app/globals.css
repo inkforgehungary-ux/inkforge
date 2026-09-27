@@ -11,7 +11,6 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
 }
 
-/* --- Irasrendszer-specifikus betukeszletek --- */
 .font-base { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
 .font-jp   { font-family: 'Noto Sans JP', 'Inter', ui-sans-serif, sans-serif; }
 .font-kr   { font-family: 'Noto Sans KR', 'Inter', ui-sans-serif, sans-serif; }
@@ -20,27 +19,10 @@ body {
 .font-ar   { font-family: 'Noto Sans Arabic', 'Inter', ui-sans-serif, sans-serif; }
 .font-he   { font-family: 'Noto Sans Hebrew', 'Inter', ui-sans-serif, sans-serif; }
 
-/* --- Jobbrol balra (arab, heber) --- */
-[dir='rtl'] body {
-  direction: rtl;
-}
+[dir='rtl'] { direction: rtl; }
 
-[dir='rtl'] .rtl-flip {
-  transform: scaleX(-1);
-}
-
-/* --- Kinai / japan tordeles: karakterenkent, ne szokozzel --- */
-.font-jp, .font-sc, .font-kr {
-  line-break: strict;
-  word-break: normal;
-  overflow-wrap: anywhere;
-}
-
-/* --- Thai: nincs szohatar, hosszu szavak --- */
-.font-th {
-  line-break: auto;
-  word-break: break-word;
-}
+.font-jp, .font-sc, .font-kr { line-break: strict; word-break: normal; overflow-wrap: anywhere; }
+.font-th { line-break: auto; word-break: break-word; }
 
 input[type='range'] {
   height: 4px;

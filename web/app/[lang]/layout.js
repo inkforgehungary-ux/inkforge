@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Nav from '../../components/Nav';
-import { LOCALE_CODES, getDictionary, makeT, getDirection, getFontClass } from '../../lib/i18n/config';
+import { LOCALE_CODES, getDictionary, makeT, getFontClass } from '../../lib/i18n/config';
 import '../globals.css';
 
 export function generateStaticParams() {
@@ -12,27 +12,27 @@ export function generateMetadata({ params }) {
   return { title: 'InkForge – ' + t('home.tagline') };
 }
 
+// A nyelvi layout NEM ad html/body-t (azt a gyoker layout adja),
+// csak a nyelv-specifikus keretet: betukeszlet, irany, navigacio.
 export default function LocaleLayout({ children, params }) {
   const { lang } = params;
   if (!LOCALE_CODES.includes(lang)) notFound();
 
   const dict = getDictionary(lang);
   const t = makeT(dict);
-  const dir = getDirection(lang);
   const fontClass = getFontClass(lang);
+  const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
 
   return (
-    <html lang={lang} dir={dir}>
-      <body className={fontClass}>
-        <Nav lang={lang} t={t} />
-        {children}
-        <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
-            <span>InkForge · Tattoo Stencil Platform · B2B</span>
-            <span>{t('footer.note')}</span>
-          </div>
-        </footer>
-      </body>
-    </html>
+    <div className={fontClass} dir={dir} lang={lang}>
+      <Nav lang={lang} t={t} />
+      {children}
+      <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+          <span>InkForge · Tattoo Stencil Platform · B2B</span>
+          <span>{t('footer.note')}</span>
+        </div>
+      </footer>
+    </div>
   );
 }

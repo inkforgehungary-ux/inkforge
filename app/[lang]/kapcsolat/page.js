@@ -1,26 +1,14 @@
-import { getDictionary, makeT } from '../../../lib/i18n/config';
-import LocaleShell from '../../../components/LocaleShell';
-
-export function generateMetadata({ params }) {
-  const t = makeT(getDictionary(params.lang));
-  return { title: t('contact.title') + ' - InkForge' };
-}
-
+// Kapcsolat — NULLA import.
 export default function ContactPage({ params }) {
-  const lang = params.lang;
-  const t = makeT(getDictionary(lang));
+  const lang = (params && params.lang) || 'hu';
   return (
-    <LocaleShell lang={lang} t={t}>
+    <div lang={lang}>
       <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('contact.title')}</h1>
-        <p className="mt-2 text-sm text-stone-400">{t('contact.intro')}</p>
-        <a
-          href="mailto:inkforge.hungary@gmail.com"
-          className="mt-8 inline-block rounded-xl border border-stone-800 bg-stone-900/40 px-5 py-6 text-sm text-stone-300 hover:border-amber-600 hover:text-amber-400"
-        >
-          inkforge.hungary@gmail.com
-        </a>
+        <a href={'/' + lang} className="text-sm text-stone-500 hover:text-amber-400">Vissza</a>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">Kapcsolat</h1>
+        <p className="mt-2 text-sm text-stone-400">Irj, es valaszolunk.</p>
+        <p className="mt-8 rounded-xl border border-stone-800 bg-stone-900/40 px-5 py-6 text-sm text-stone-300">inkforge.hungary@gmail.com</p>
       </main>
-    </LocaleShell>
+    </div>
   );
 }

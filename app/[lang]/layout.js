@@ -1,7 +1,7 @@
-// Nyelvi layout — NULLA import.
+// Nyelvi layout — 4 nyelv (hu, en, de, pl). NULLA import.
 export const dynamicParams = false;
 
-const CODES = ['hu','en','de','fr','es','it','pt','nl','pl','cs','sk','ro','tr','ru','ja','ko','zh','th','ar','he'];
+const CODES = ['hu','en','de','pl'];
 
 export function generateStaticParams() {
   return CODES.map(function (lang) { return { lang: lang }; });

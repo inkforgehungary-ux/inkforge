@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
-// A repo gyokereben levo public/ mappa kiszolgalasa.
+// A repo GYOKEREBEN levo public/ mappa kiszolgalasa.
 // A kepek ott vannak (nem a web/public-ban), es a Next.js csak a sajat
 // public/ mappajat szolgalja ki — ez az endpoint athidalja.
+// A build idejere a fajlok atmasolasa is megtortenik (lásd next.config.js).
 
-const ROOT_PUBLIC = path.join(process.cwd(), '..', 'public');
+const ROOT_PUBLIC = path.join(process.cwd(), 'public');
 
 const MIME = {
   '.png': 'image/png',
@@ -23,8 +24,6 @@ export default function handler(req, res) {
     res.status(400).json({ error: 'Hianyzik a fajlnev' });
     return;
   }
-
-  // Utvonal-traversal vedelem: csak egyszeru fajlnev engedett
   if (file.includes('/') || file.includes('\\') || file.includes('..')) {
     res.status(400).json({ error: 'Ervenytelen fajlnev' });
     return;
@@ -37,12 +36,9 @@ export default function handler(req, res) {
       res.status(404).json({ error: 'Nincs ilyen fajl: ' + file });
       return;
     }
-
     const data = fs.readFileSync(full);
     const ext = path.extname(file).toLowerCase();
-    const type = MIME[ext] || 'application/octet-stream';
-
-    res.setHeader('Content-Type', type);
+    res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
     res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
     res.status(200).send(data);
   } catch (err) {

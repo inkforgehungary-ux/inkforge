@@ -9,9 +9,10 @@ export const viewport = {
   initialScale: 1,
 };
 
-// A gyoker layout csak a HTML-keretet adja.
-// A nyelvi layout ([lang]/layout.js) adja a <html> attributumokat,
-// de a Next.js 14-ben a gyoker layoutnak is tartalmaznia kell a html/body elemet.
+// A gyoker layout: csak a HTML-keret + a globalis stilusok.
+// A nyelvi layout ([lang]/layout.js) adja a nyelv-specifikus reszt.
+import '../globals.css';
+
 export default function RootLayout({ children }) {
   return (
     <html lang="hu">

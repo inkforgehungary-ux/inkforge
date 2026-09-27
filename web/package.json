@@ -4,6 +4,7 @@
   "private": true,
   "description": "InkForge – tattoo stencil platform",
   "scripts": {
+    "prebuild": "node scripts/copy-assets.js",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

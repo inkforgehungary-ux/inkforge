@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation';
 import Nav from '../../components/Nav';
 import { LOCALE_CODES, getDictionary, makeT, getFontClass } from '../../lib/i18n/config';
-import '../globals.css';
+
+export const dynamicParams = false;
 
 export function generateStaticParams() {
   return LOCALE_CODES.map((lang) => ({ lang }));
@@ -12,14 +13,11 @@ export function generateMetadata({ params }) {
   return { title: 'InkForge – ' + t('home.tagline') };
 }
 
-// A nyelvi layout NEM ad html/body-t (azt a gyoker layout adja),
-// csak a nyelv-specifikus keretet: betukeszlet, irany, navigacio.
 export default function LocaleLayout({ children, params }) {
   const { lang } = params;
   if (!LOCALE_CODES.includes(lang)) notFound();
 
-  const dict = getDictionary(lang);
-  const t = makeT(dict);
+  const t = makeT(getDictionary(lang));
   const fontClass = getFontClass(lang);
   const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
 

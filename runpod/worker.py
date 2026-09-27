@@ -127,11 +127,13 @@ def _lineart_prompt(user_prompt: str) -> str:
     if not clean:
         clean = "tattoo design"
     return (
-        f"{clean}, tattoo flash design, professional tattoo stencil, "
-        "clean sharp black ink line drawing, crisp continuous contours, "
-        "clear silhouette, controlled line weight, white background, "
-        "no shading, no grey, no color, no texture, isolated subject, "
-        "print-ready tattoo transfer artwork"
+        f"{clean}, SINGLE SUBJECT ONLY, one centered tattoo design, "
+        "professional tattoo flash, clean black ink line art, "
+        "strong recognizable silhouette, crisp continuous outer contour, "
+        "controlled interior contour lines, isolated on pure white, "
+        "no scene, no collage, no multiple objects, no duplicated subject, "
+        "no decorative background, no frame, no border, no shading, "
+        "no grey, no color, no texture, print-ready tattoo transfer artwork"
     )
 
 def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
@@ -143,15 +145,15 @@ def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
     if source_mode in ("text_to_stencil", "image_to_image_stencil"):
-        # Generated line-art is normally dark strokes on a light field.
-        otsu = cv2.threshold(
-            gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )[1]
-        edges = cv2.Canny(gray, 45, 140)
-        mask = cv2.bitwise_or(otsu, edges)
-        kernel = np.ones((2, 2), np.uint8)
+        # AI tattoo artwork: prefer contours over filled/shaded regions.
+        # Combining Otsu with Canny turns dark shading into large black blobs.
+        edges = cv2.Canny(gray, 70, 180)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        mask = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        # Remove tiny noise and reinforce only the actual contour strokes.
+        mask = cv2.dilate(mask, np.ones((2, 2), np.uint8), iterations=1)
     else:
         # Photo/reference trace: edge-first, preserving the original silhouette.
         edges = cv2.Canny(gray, 55, 160)

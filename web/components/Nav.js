@@ -35,6 +35,7 @@ export default function Nav({ lang, t }) {
     <nav className="sticky top-0 z-40 border-b border-stone-800 bg-stone-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-2 px-6 py-3">
         <Link href={`/${lang}`} className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/api/static/inkforge-logo.png" alt="InkForge" className="h-8 w-auto" />
         </Link>
 
@@ -70,7 +71,9 @@ export default function Nav({ lang, t }) {
 
         <button onClick={() => setOpen((v) => !v)}
           className="rounded-lg border border-stone-700 px-3 py-2 text-sm text-stone-300 lg:hidden"
-          aria-label="Menu">☰</button>
+          aria-label="Menu">
+          Menu
+        </button>
       </div>
 
       {open && (

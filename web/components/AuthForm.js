@@ -114,7 +114,7 @@ export default function AuthForm({ mode: initialMode = 'signin', onDone, compact
 
       <button type="submit" disabled={busy}
         className="w-full rounded-lg bg-amber-500 px-4 py-2.5 font-semibold text-stone-950 transition hover:bg-amber-400 disabled:bg-stone-700 disabled:text-stone-400">
-        {busy ? '…' : titles[mode]}
+        {busy ? '...' : titles[mode]}
       </button>
 
       {err && <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-300">{err}</p>}
@@ -123,12 +123,12 @@ export default function AuthForm({ mode: initialMode = 'signin', onDone, compact
       <div className="flex flex-wrap justify-between gap-2 pt-1 text-xs">
         {mode !== 'signin' && (
           <button type="button" onClick={() => { reset(); setMode('signin'); }} className="text-stone-400 hover:text-amber-400">
-            Mar van fiokom — belepes
+            Mar van fiokom
           </button>
         )}
         {mode !== 'signup' && (
           <button type="button" onClick={() => { reset(); setMode('signup'); }} className="text-stone-400 hover:text-amber-400">
-            Nincs fiokom — regisztracio
+            Regisztracio
           </button>
         )}
         {mode !== 'forgot' && (

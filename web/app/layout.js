@@ -5,8 +5,7 @@ export const metadata = {
   icons: { icon: '/api/static/favicon.png' },
   openGraph: {
     title: 'InkForge – Tattoo Stencil Platform',
-    description:
-      'Stencil generalas, piacter es bemutatkozo profilok — B2B, raktar nelkul.',
+    description: 'Stencil generalas, piacter es bemutatkozo profilok — B2B, raktar nelkul.',
     images: [{ url: '/api/static/inkforge-opengraph.png', width: 1200, height: 630, alt: 'InkForge' }],
     type: 'website',
   },

@@ -26,7 +26,7 @@ export async function GET() {
 
   if (!stencilUrl || !hasKey) return Response.json(out);
 
-  const base = stencilUrl.replace(/\\/+$/, '');
+  const base = stencilUrl.replace(/\/+$/, '');
   const t0 = Date.now();
   try {
     const r = await fetch(base + '/health', {

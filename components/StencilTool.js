@@ -194,10 +194,38 @@ export default function StencilTool({ lang }) {
     throw new Error('A RunPod feladat időkorlátja lejárt. Ellenőrizd a worker logját.');
   }
 
+  async function compressForRunpod(file) {
+    if (!file || !file.type.startsWith('image/')) return file;
+    const maxSide = 1600;
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    try {
+      img.src = src;
+      await new Promise(function (resolve, reject) {
+        img.onload = resolve;
+        img.onerror = function () { reject(new Error('A kép nem olvasható.')); };
+      });
+      const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const blob = await new Promise(function (resolve) {
+        cv.toBlob(resolve, 'image/jpeg', 0.86);
+      });
+      return blob ? new File([blob], 'inkforge-source.jpg', { type: 'image/jpeg' }) : file;
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+
   async function runViaGenerate(f) {
     setStage('analyzing');
+    const uploadFile = await compressForRunpod(f);
     const fd = new FormData();
-    fd.append('image', f);
+    fd.append('image', uploadFile);
     fd.append('mode', imageMode);
     fd.append('target_coverage', '0.06');
     fd.append('max_dim', '768');
@@ -498,6 +526,13 @@ export default function StencilTool({ lang }) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={result.url} alt="" className="mx-auto block max-h-[420px] w-auto" />
               </div>
+              {result.generatedUrl && result.isStencil !== false && (
+                <details className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3">
+                  <summary className="cursor-pointer text-xs text-stone-400">AI kép előnézete (kép → kép)</summary>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={result.generatedUrl} alt="" className="mx-auto mt-3 block max-h-[320px] w-auto rounded-lg" />
+                </details>
+              )}
 
               {result.isStencil !== false && (
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">

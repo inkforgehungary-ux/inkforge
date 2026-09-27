@@ -1,14 +1,19 @@
 # InkForge – Telepites (Vercel)
 
-## Beallitas
+## Root Directory — KÉZZEL kell beallitani
 
-**Root Directory:** `web` — a frontend a `web/` alkonyvtarban van.
-Ez a gyokerben levo `vercel.json`-ben is be van allitva, tehat
-az import ablakban nem kell kezzel atallitani.
+A frontend a `web/` alkonyvtarban van, ezert a Vercel projektben:
+
+**Settings -> Build and Deployment -> Root Directory** -> írd be: `web`
+
+Majd a **Framework Preset** legyen **Next.js** (ne „Other”).
+
+Ez azert kell kezzel, mert a `vercel.json` nem tudja beallitani a root
+konyvtarat — a Vercel a projekt beallitasaiban tarolja.
 
 ## Kornyezeti valtozok
 
-A Vercel projekt beallitasainal (Settings -> Environment Variables):
+**Settings -> Environment Variables**:
 
 | Nev | Honnan |
 |---|---|

@@ -91,7 +91,7 @@ export default function StencilTool({ lang }) {
   const [styleSlug, setStyleSlug] = useState('linework');
   const [bodyPart, setBodyPart] = useState('');
   const [title, setTitle] = useState('');
-  const [imageMode, setImageMode] = useState('image_to_image_stencil');
+  const [imageMode, setImageMode] = useState('image_to_stencil');
   const [imagePrompt, setImagePrompt] = useState('');
   const [textMode, setTextMode] = useState('text_to_stencil');
   function setTargetWidth(value) {
@@ -310,7 +310,7 @@ export default function StencilTool({ lang }) {
     fd.append('mode', imageMode);
     fd.append('target_coverage', '0.06');
     fd.append('max_dim', '1024');
-    fd.append('strength', '0.38');
+    fd.append('strength', '0.28');
     fd.append('width_mm', String(widthMm));
     fd.append('height_mm', String(heightMm));
     fd.append('dpi', String(dpi));
@@ -644,7 +644,8 @@ export default function StencilTool({ lang }) {
                   <span className="text-xs uppercase tracking-wider text-stone-500">Kép feldolgozás</span>
                   <select value={imageMode} onChange={function (e) { setImageMode(e.target.value); }}
                     className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
-                    <option value="image_to_image_stencil">AI kép → kép → éles stencil</option>
+                    <option value="image_to_stencil">Kép → vékony vonalas stencil</option>
+                    <option value="image_to_image_stencil">AI kép → kép → vékony stencil</option>
                     <option value="image_to_stencil">Kép → közvetlen éles stencil</option>
                     <option value="image_to_image">AI kép → kép</option>
                   </select>
@@ -652,7 +653,7 @@ export default function StencilTool({ lang }) {
                 <label className="block text-left">
                   <span className="text-xs uppercase tracking-wider text-stone-500">Kiegészítő prompt</span>
                   <input value={imagePrompt} onChange={function (e) { setImagePrompt(e.target.value); }}
-                    placeholder="pl. preserve face, simplify details, bold clean tattoo lines"
+                    placeholder="pl. preserve face, simple thin contour lines, minimal details"
                     className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
                 </label>
               </div>
@@ -718,8 +719,8 @@ export default function StencilTool({ lang }) {
                   <span className="text-xs uppercase tracking-wider text-stone-500">Kép feldolgozás</span>
                   <select value={imageMode} onChange={function (e) { setImageMode(e.target.value); }}
                     className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
-                    <option value="image_to_image_stencil">AI kép → kép → éles stencil</option>
-                    <option value="image_to_stencil">Kép → közvetlen éles stencil</option>
+                    <option value="image_to_stencil">Kép → vékony vonalas stencil</option>
+                    <option value="image_to_image_stencil">AI kép → kép → vékony stencil</option>
                     <option value="image_to_image">AI kép → kép</option>
                   </select>
                 </label>

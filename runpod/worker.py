@@ -587,7 +587,6 @@ def handler(job: dict):
             "verdictText": verdict,
             "seed": seed,
             "model": "DexiNed + HED + adaptive contour thinning",
-            "style": drawing_style,
             "gpu_ms": int((time.time() - started) * 1000),
         }
 

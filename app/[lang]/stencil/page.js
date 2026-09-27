@@ -13,20 +13,20 @@ const T = {
   hu: {
     nav: 'Stencil',
     title: 'Stencil generalasa',
-    intro: 'Toltsd fel a kepet, allitsd be a nyomtatasi meretet, es a motor kesziti el a sablont. A feldolgozas a bongeszodben fut — a kep nem kerul szerverre.',
+    intro: 'Toltsd fel a kepet, allitsd be a nyomtatasi meretet, es a motor kesziti el a sablont. A generálás a RunPod GPU-motoron fut, és csak sikeres generálás után vonunk le kreditet.',
     steps: ['Kep feltoltese', 'Meret es motor-ag', 'Sablon generalasa', 'Letoltes'],
     back: 'Vissza a fooldalra',
-    facts: [['300 DPI', 'nyomtatasi felbontas'], ['1:1', 'mm-pontos nyomtatasi lap'], ['4 ag', 'a motor automatikusan valaszt'], ['ingyenes', 'a feldolgozas']],
-    foot: 'A feldolgozas a bongeszodben fut.'
+    facts: [['300 DPI', 'nyomtatasi felbontas'], ['1:1', 'mm-pontos nyomtatasi lap'], ['4 ag', 'a motor automatikusan valaszt'], ['500 Ft', 'alap generálás']],
+    foot: 'A generálás a RunPod GPU-motoron fut.'
   },
   en: {
     nav: 'Stencil',
     title: 'Generate a stencil',
-    intro: 'Upload the image, set the print size, and the engine builds the stencil. Processing runs in your browser — the image never reaches a server.',
+    intro: 'Upload the image, set the print size, and the engine builds the stencil. Generation runs on the RunPod GPU engine; credits are consumed only after a successful result.',
     steps: ['Upload image', 'Size and engine branch', 'Generate stencil', 'Download'],
     back: 'Back to home',
-    facts: [['300 DPI', 'print resolution'], ['1:1', 'mm-accurate print sheet'], ['4 branches', 'picked automatically'], ['free', 'processing']],
-    foot: 'Processing runs in your browser.'
+    facts: [['300 DPI', 'print resolution'], ['1:1', 'mm-accurate print sheet'], ['4 branches', 'picked automatically'], ['500 HUF', 'standard generation']],
+    foot: 'Generation runs on the RunPod GPU engine.'
   },
   de: {
     nav: 'Stencil',
@@ -34,7 +34,7 @@ const T = {
     intro: 'Bild hochladen, Druckgrosse einstellen, der Motor baut die Schablone. Die Verarbeitung lauft im Browser.',
     steps: ['Bild hochladen', 'Grosse und Motor-Zweig', 'Schablone erstellen', 'Download'],
     back: 'Zuruck zur Startseite',
-    facts: [['300 DPI', 'Druckauflosung'], ['1:1', 'mm-genaues Druckblatt'], ['4 Zweige', 'automatisch gewahlt'], ['kostenlos', 'die Verarbeitung']],
+    facts: [['300 DPI', 'Druckauflosung'], ['1:1', 'mm-genaues Druckblatt'], ['4 Zweige', 'automatisch gewahlt'], ['500 HUF', 'standard generation']],
     foot: 'Die Verarbeitung lauft im Browser.'
   },
   pl: {
@@ -43,7 +43,7 @@ const T = {
     intro: 'Wgraj obraz, ustaw rozmiar wydruku, a silnik zbuduje szablon. Przetwarzanie dziala w przegladarce.',
     steps: ['Wgraj obraz', 'Rozmiar i galaz silnika', 'Utworz szablon', 'Pobierz'],
     back: 'Powrot do strony glownej',
-    facts: [['300 DPI', 'rozdzielczosc druku'], ['1:1', 'arkusz co do mm'], ['4 galezie', 'wybierane automatycznie'], ['bezplatnie', 'przetwarzanie']],
+    facts: [['300 DPI', 'rozdzielczosc druku'], ['1:1', 'arkusz co do mm'], ['4 galezie', 'wybierane automatycznie'], ['500 HUF', 'standard generation']],
     foot: 'Przetwarzanie dziala w przegladarce.'
   }
 };

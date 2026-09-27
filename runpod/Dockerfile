@@ -14,6 +14,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN python3 -m pip install --upgrade pip &&     python3 -m pip install --no-cache-dir -r requirements.txt
 
+COPY hed/deploy.prototxt /app/hed/deploy.prototxt
+RUN mkdir -p /app/hed && \
+    curl -L --fail --retry 3 --retry-delay 2 \
+      -o /app/hed/hed_pretrained_bsds.caffemodel \
+      https://vcl.ucsd.edu/hed/hed_pretrained_bsds.caffemodel
+
 COPY worker.py .
 
 CMD ["python3", "-u", "worker.py"]

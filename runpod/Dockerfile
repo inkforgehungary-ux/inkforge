@@ -12,13 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends     python3 pyt
 WORKDIR /app
 
 COPY requirements.txt .
-RUN python3 -m pip install --upgrade pip &&     python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --upgrade pip &&     python3 -m pip install --no-cache-dir -r requirements.txt &&     python3 -m pip install --no-cache-dir gdown==5.2.0
 
 COPY hed/deploy.prototxt /app/hed/deploy.prototxt
-RUN mkdir -p /app/hed && \
+COPY dexined_model.py /app/dexined_model.py
+RUN mkdir -p /app/hed /app/dexined && \
     curl -L --fail --retry 3 --retry-delay 2 \
       -o /app/hed/hed_pretrained_bsds.caffemodel \
-      https://vcl.ucsd.edu/hed/hed_pretrained_bsds.caffemodel
+      https://vcl.ucsd.edu/hed/hed_pretrained_bsds.caffemodel && \
+    gdown 1V56vGTsu7GYiQouCIKvTWl5UKCZ6yCNu -O /app/dexined/10_model.pth
 
 COPY worker.py .
 

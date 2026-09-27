@@ -386,6 +386,30 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
     mask = _thin_mask(mask)
     mask = _remove_border_components(mask)
 
+    # Standard tattoo-stencil profile: add sparse, luminance-guided
+    # engraving/hatching only inside darker tonal regions. This avoids
+    # solid fills while retaining the depth visible in professional
+    # realism stencils.
+    if style == "stencil":
+        tone = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        tone = cv2.GaussianBlur(tone, (9, 9), 0)
+        dark = (tone < np.percentile(tone, 48)).astype(np.uint8) * 255
+        dark = cv2.morphologyEx(
+            dark, cv2.MORPH_OPEN,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        )
+        hatch = np.zeros_like(mask)
+        spacing = max(7, int(round(min(h, w) / 110)))
+        for offset in range(-h, w, spacing):
+            p1 = (max(offset, 0), max(-offset, 0))
+            p2 = (min(w - 1, offset + h), min(h - 1, h + offset))
+            cv2.line(hatch, p1, p2, 255, 1, cv2.LINE_AA)
+        hatch = cv2.bitwise_and(hatch, dark)
+        # Keep hatching subordinate to the semantic contours.
+        hatch = cv2.bitwise_and(hatch, cv2.dilate(mask, np.ones((3, 3), np.uint8)))
+        mask = cv2.bitwise_or(mask, hatch)
+        mask = _thin_mask(mask)
+
     num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     out = np.zeros_like(mask)
     min_area = max(10, int(h * w * (0.000010 if style == "line" else 0.000007)))

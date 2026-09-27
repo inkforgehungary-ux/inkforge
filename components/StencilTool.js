@@ -14,7 +14,22 @@
 //   A bongeszo-motor csak VESZTARTALEK, es ki is irja.
 
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { maskToCanvas } from '../lib/stencil-client';
+function maskToCanvas(mask, w, h, invert) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const data = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) {
+    let v = mask[i] > 0 ? 0 : 255;
+    if (invert) v = 255 - v;
+    data.data[i * 4] = v;
+    data.data[i * 4 + 1] = v;
+    data.data[i * 4 + 2] = v;
+    data.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(data, 0, 0);
+  return cv;
+}
 import { canvasToPNGBytes, downloadBlob } from '../lib/png-browser';
 import { calculateA4Layout, mmToPx } from '../lib/print-layout';
 

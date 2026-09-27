@@ -1,4 +1,6 @@
 // INKFORGE — STENCIL OLDAL
+// A motor bekotese a /[lang]/stencil utvonalra.
+
 import StencilTool from '../../../components/StencilTool';
 
 const CODES = ['hu', 'en', 'de', 'pl'];
@@ -9,32 +11,40 @@ export function generateStaticParams() {
 
 const T = {
   hu: {
-    nav: 'Stencil', title: 'Stencil generalasa',
+    nav: 'Stencil',
+    title: 'Stencil generalasa',
     intro: 'Toltsd fel a kepet, allitsd be a nyomtatasi meretet, es a motor kesziti el a sablont. A feldolgozas a bongeszodben fut — a kep nem kerul szerverre.',
-    steps: ['Kep feltoltese', 'Meret es motor-ag', 'Sablon generalasa', 'Letoltes vagy kuldes'],
+    steps: ['Kep feltoltese', 'Meret es motor-ag', 'Sablon generalasa', 'Letoltes'],
     back: 'Vissza a fooldalra',
-    facts: [['300 DPI', 'nyomtatasi felbontas'], ['1:1', 'mm-pontos nyomtatasi lap'], ['4 ag', 'a motor automatikusan valaszt'], ['0 ft', 'a feldolgozas ingyenes']]
+    facts: [['300 DPI', 'nyomtatasi felbontas'], ['1:1', 'mm-pontos nyomtatasi lap'], ['4 ag', 'a motor automatikusan valaszt'], ['ingyenes', 'a feldolgozas']],
+    foot: 'A feldolgozas a bongeszodben fut.'
   },
   en: {
-    nav: 'Stencil', title: 'Generate a stencil',
+    nav: 'Stencil',
+    title: 'Generate a stencil',
     intro: 'Upload the image, set the print size, and the engine builds the stencil. Processing runs in your browser — the image never reaches a server.',
-    steps: ['Upload image', 'Size and engine branch', 'Generate stencil', 'Download or send'],
+    steps: ['Upload image', 'Size and engine branch', 'Generate stencil', 'Download'],
     back: 'Back to home',
-    facts: [['300 DPI', 'print resolution'], ['1:1', 'mm-accurate print sheet'], ['4 branches', 'picked automatically'], ['free', 'processing costs nothing']]
+    facts: [['300 DPI', 'print resolution'], ['1:1', 'mm-accurate print sheet'], ['4 branches', 'picked automatically'], ['free', 'processing']],
+    foot: 'Processing runs in your browser.'
   },
   de: {
-    nav: 'Stencil', title: 'Stencil erstellen',
+    nav: 'Stencil',
+    title: 'Stencil erstellen',
     intro: 'Bild hochladen, Druckgrosse einstellen, der Motor baut die Schablone. Die Verarbeitung lauft im Browser.',
-    steps: ['Bild hochladen', 'Grosse und Motor-Zweig', 'Schablone erstellen', 'Download oder senden'],
+    steps: ['Bild hochladen', 'Grosse und Motor-Zweig', 'Schablone erstellen', 'Download'],
     back: 'Zuruck zur Startseite',
-    facts: [['300 DPI', 'Druckauflosung'], ['1:1', 'mm-genaues Druckblatt'], ['4 Zweige', 'automatisch gewahlt'], ['kostenlos', 'die Verarbeitung']]
+    facts: [['300 DPI', 'Druckauflosung'], ['1:1', 'mm-genaues Druckblatt'], ['4 Zweige', 'automatisch gewahlt'], ['kostenlos', 'die Verarbeitung']],
+    foot: 'Die Verarbeitung lauft im Browser.'
   },
   pl: {
-    nav: 'Szablon', title: 'Utworz szablon',
+    nav: 'Szablon',
+    title: 'Utworz szablon',
     intro: 'Wgraj obraz, ustaw rozmiar wydruku, a silnik zbuduje szablon. Przetwarzanie dziala w przegladarce.',
-    steps: ['Wgraj obraz', 'Rozmiar i galaz silnika', 'Utworz szablon', 'Pobierz lub wyslij'],
+    steps: ['Wgraj obraz', 'Rozmiar i galaz silnika', 'Utworz szablon', 'Pobierz'],
     back: 'Powrot do strony glownej',
-    facts: [['300 DPI', 'rozdzielczosc druku'], ['1:1', 'arkusz co do mm'], ['4 galezie', 'wybierane automatycznie'], ['bezplatnie', 'przetwarzanie']]
+    facts: [['300 DPI', 'rozdzielczosc druku'], ['1:1', 'arkusz co do mm'], ['4 galezie', 'wybierane automatycznie'], ['bezplatnie', 'przetwarzanie']],
+    foot: 'Przetwarzanie dziala w przegladarce.'
   }
 };
 
@@ -107,7 +117,7 @@ export default function StencilPage({ params }) {
       <footer className="relative z-10 border-t border-amber-900/25 px-6 py-10 text-xs text-stone-600">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <span className="tracking-wide">INKFORGE &middot; STENCIL ENGINE</span>
-          <span>A feldolgozas a bongeszodben fut.</span>
+          <span>{t.foot}</span>
         </div>
       </footer>
     </div>

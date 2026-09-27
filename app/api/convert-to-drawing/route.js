@@ -1,5 +1,5 @@
 // INKFORGE — KÉP -> VONALAS RAJZ
-// POST /api/convert-to-drawing -> RunPod image_to_image
+// POST /api/convert-to-drawing -> RunPod image_to_drawing
 // GET  /api/convert-to-drawing?id=... -> RunPod status + generated PNG
 
 import { runpodReady, runpodRun, runpodStatus, extractRunpodOutput } from '../../../../lib/runpod-client.js';
@@ -54,14 +54,13 @@ export async function POST(req) {
     }
 
     const start = await runpodRun({
-      mode: 'image_to_image',
+      mode: 'image_to_drawing',
       image_base64: imageB64,
-      prompt,
+      prompt: 'thin pencil contour drawing, essential lines only, clean single subject',
       negative: DRAWING_NEGATIVE,
       max_side: 1024,
-      steps: 28,
-      guidance: 5.8,
-      strength: 0.55,
+      steps: 1,
+      guidance: 1,
       return_generated: true
     });
 

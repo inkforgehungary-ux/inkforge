@@ -925,11 +925,17 @@ export default function StencilTool({ lang }) {
                 </>
               ) : (
                 <>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <Stat label="AI motor" value="DexiNed + HED" gold />
+                    <Stat label="Fedettség" value={r ? r.coverage + '%' : '—'} />
+                    <Stat label="Külön vonalcsoport" value={r ? String(r.islands) : '—'} />
+                    <Stat label="Minőség" value={r ? r.quality : '—'} tone={qualityTone || 'ok'} />
+                  </div>
                   <p className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3 text-sm text-stone-300">
-                    Ez egy tiszta, vékony ceruzás kontúrrajz: csak a lényegi vonalak maradtak meg.
+                    AI-alapú professzionális kontúrrajz: DexiNed + HED élkivonás, adaptív részletválogatás és 1-pixeles skeleton/thinning.
                   </p>
                   <a href={result.url} download={'inkforge-' + (title || 'ai-kep') + '.png'}
-                    className="btn3d mt-5 block w-full !py-3.5 text-center">Ceruzarajz letöltése</a>
+                    className="btn3d mt-5 block w-full !py-3.5 text-center">AI ceruzarajz letöltése</a>
                 </>
               )}
             </div>

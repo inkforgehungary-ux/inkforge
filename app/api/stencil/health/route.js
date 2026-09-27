@@ -11,7 +11,8 @@ export async function GET() {
 
   const out = {
     ok: true,
-    engine: '2.3.0',
+    engine: '3.0.0',
+    worker_contract: 'runpod-serverless',
     runpod: {
       configured: !!(stencilUrl && hasKey),
       stencil_url: stencilUrl,

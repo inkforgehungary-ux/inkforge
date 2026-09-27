@@ -270,7 +270,7 @@ export default function StencilTool({ lang }) {
       const s = await fetch(route + '?' + qs.toString());
       const sj = await s.json().catch(function () { return {}; });
       if (sj.failed) throw new Error(sj.error || 'A RunPod generalas sikertelen.');
-      if (sj.ok && sj.ready && sj.png_base64) return sj;
+      if (sj.ok && sj.ready && (sj.png_base64 || sj.image_base64)) return sj;
     }
     throw new Error('A RunPod feladat időkorlátja lejárt. Ellenőrizd a worker logját.');
   }
@@ -577,7 +577,7 @@ export default function StencilTool({ lang }) {
   return (
     <div className="mt-8">
       <div className="flex flex-wrap gap-2">
-        {[['upload', 'Kep feltoltese'], ['drawing', 'Kep → rajz'], ['text', 'Leirasbol'], ['url', 'Linkbol']].map(function (x) {
+        {[['upload', 'Kep feltoltese'], ['drawing', 'Vekony ceruza-rajz'], ['text', 'Leirasbol'], ['url', 'Linkbol']].map(function (x) {
           const on = tab === x[0];
           return (
             <button key={x[0]} onClick={function () { setTab(x[0]); setResult(null); setError(''); setInfo(''); }}
@@ -600,9 +600,9 @@ export default function StencilTool({ lang }) {
           {tab === 'drawing' && (
             <div className="card3d p-6">
               <div className="mb-5">
-                <span className="text-xs uppercase tracking-wider text-stone-500">Kép → rajz AI</span>
+                <span className="text-xs uppercase tracking-wider text-stone-500">Vékony ceruzarajz</span>
                 <p className="mt-2 text-sm text-stone-300">
-                  A feltöltött képből tiszta, vékony vonalas rajz készül.
+                  A képből csak a lényeg marad: vékony, tiszta kontúrvonalak. Nincs árnyék, nincs kitöltés, nincs extra részlet.
                 </p>
               </div>
               <div onDragOver={function (e) { e.preventDefault(); setDrag(true); }}
@@ -619,14 +619,14 @@ export default function StencilTool({ lang }) {
                   <>
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center border border-amber-700/60 text-2xl text-amber-500">+</div>
                     <p className="text-stone-200">Húzd ide a képet, vagy kattints</p>
-                    <p className="mt-2 text-xs text-stone-500">PNG, JPG — vékony, tiszta vonalas rajz</p>
+                    <p className="mt-2 text-xs text-stone-500">PNG, JPG — vékony ceruzás kontúrrajz</p>
                   </>
                 )}
               </div>
               <label className="mt-5 block">
                 <span className="text-xs uppercase tracking-wider text-stone-500">Opcionális finomító prompt</span>
                 <input value={imagePrompt} onChange={function (e) { setImagePrompt(e.target.value); }}
-                  placeholder="pl. egyszerűbb kontúrok, az arc maradjon felismerhető"
+                  placeholder="pl. az arc fő kontúrjai maradjanak meg"
                   className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200 outline-none focus:border-amber-600" />
               </label>
             </div>
@@ -646,7 +646,6 @@ export default function StencilTool({ lang }) {
                     className="mt-1 w-full rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2 text-sm text-stone-200">
                     <option value="image_to_stencil">Kép → vékony vonalas stencil</option>
                     <option value="image_to_image_stencil">AI kép → kép → vékony stencil</option>
-                    <option value="image_to_stencil">Kép → közvetlen éles stencil</option>
                     <option value="image_to_image">AI kép → kép</option>
                   </select>
                 </label>

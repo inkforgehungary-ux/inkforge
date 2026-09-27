@@ -1,4 +1,4 @@
-import { getDictionary, makeT } from '../../lib/i18n/config';
+import { getDictionary, makeT } from '../../../lib/i18n/config';
 import LocaleShell from '../../../components/LocaleShell';
 
 const CATS = ['machines','needles','inks','paper','stencil','hygiene','furniture','aftercare','other'];
@@ -22,8 +22,11 @@ export default function MarketplacePage({ params }) {
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {CATS.map(function (c) {
             return (
-              <a key={c} href={'/' + lang + '/piacter/' + c}
-                className="group rounded-xl border border-stone-800 bg-stone-900/40 p-5 hover:border-amber-600/60">
+              <a
+                key={c}
+                href={'/' + lang + '/piacter/' + c}
+                className="group rounded-xl border border-stone-800 bg-stone-900/40 p-5 hover:border-amber-600/60"
+              >
                 <h2 className="font-semibold text-stone-200 group-hover:text-amber-400">{t('market.cat.' + c)}</h2>
                 <span className="mt-3 inline-block text-xs text-stone-500">{t('market.soon')}</span>
               </a>

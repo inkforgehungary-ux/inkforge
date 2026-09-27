@@ -1,4 +1,4 @@
-import { getDictionary, makeT } from '../../lib/i18n/config';
+import { getDictionary, makeT } from '../../../lib/i18n/config';
 import LocaleShell from '../../../components/LocaleShell';
 
 export function generateMetadata({ params }) {
@@ -18,7 +18,7 @@ export default function DistributorsPage({ params }) {
           {[1, 2, 3].map(function (i) {
             return (
               <div key={i} className="rounded-xl border border-stone-800 bg-stone-900/40 p-5">
-                <h3 className="font-semibold text-amber-400">{t('dist.tile' + i + '.title')}</h3>
+                <h2 className="font-semibold text-amber-400">{t('dist.tile' + i + '.title')}</h2>
                 <p className="mt-2 text-sm leading-relaxed text-stone-400">{t('dist.tile' + i + '.text')}</p>
               </div>
             );

@@ -2,6 +2,9 @@ export const metadata = {
   title: 'InkForge – Tattoo Stencil Platform | B2B',
   description:
     'Raktar nelkuli B2B platform: stencil generalas, piacter es bemutatkozo profilok tetovalostudioknak es muveszeknek.',
+  icons: {
+    icon: '/favicon.png',
+  },
 };
 
 export const viewport = {

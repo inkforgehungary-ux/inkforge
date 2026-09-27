@@ -1,4 +1,4 @@
-import { getDictionary, makeT } from '../../lib/i18n/config';
+import { getDictionary, makeT } from '../../../lib/i18n/config';
 import LocaleShell from '../../../components/LocaleShell';
 
 export function generateMetadata({ params }) {

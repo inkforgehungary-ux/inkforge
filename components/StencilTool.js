@@ -646,8 +646,8 @@ export default function StencilTool({ lang }) {
                   <button type="button" onClick={function () { setDrawingStyle('stencil'); }}
                     className={'rounded-lg border px-3 py-3 text-left transition ' +
                       (drawingStyle === 'stencil' ? 'border-amber-500 bg-amber-500/10 text-amber-300' : 'border-stone-800 text-stone-400 hover:border-stone-600')}>
-                    <span className="block text-sm font-medium">Tetováló stencil</span>
-                    <span className="mt-1 block text-[11px] text-stone-500">Több használható részlet · transferre optimalizálva</span>
+                    <span className="block text-sm font-medium">Tetováló stencil · Standard</span>
+                    <span className="mt-1 block text-[11px] text-stone-500">Kontúr + kontrollált tónusvonalak · transferre optimalizálva</span>
                   </button>
                 </div>
               </div>
@@ -952,7 +952,7 @@ export default function StencilTool({ lang }) {
                     <Stat label="Minőség" value={r ? r.quality : '—'} tone={qualityTone || 'ok'} />
                   </div>
                   <p className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3 text-sm text-stone-300">
-                    AI-alapú professzionális kontúrrajz: DexiNed + HED élkivonás, adaptív részletválogatás és 1-pixeles skeleton/thinning. A kiválasztott profil külön szabályozza a vonalsűrűséget.
+                    AI-alapú professzionális kontúrrajz: DexiNed + HED élkivonás, adaptív részletválogatás és 1-pixeles skeleton/thinning. A Standard stencil kontrollált tónusvonalakat is használ a mélység megtartásához.
                   </p>
                   <a href={result.url} download={'inkforge-' + (title || 'ai-kep') + '.png'}
                     className="btn3d mt-5 block w-full !py-3.5 text-center">AI ceruzarajz letöltése</a>

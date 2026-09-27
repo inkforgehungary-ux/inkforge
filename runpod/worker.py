@@ -18,6 +18,7 @@ import torch
 import runpod
 from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
+from dexined_model import DexiNed
 
 ENGINE_VERSION = "3.2.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -29,6 +30,7 @@ _PIPE_LOCK = threading.Lock()
 _TEXT_PIPE = None
 _IMG2IMG_PIPE = None
 _HED_NET = None
+_DEXINED_NET = None
 
 LINEART_NEGATIVE = (
     "photorealistic, photograph, grey shading, grayscale shading, gradients, "
@@ -37,10 +39,11 @@ LINEART_NEGATIVE = (
 )
 
 def _free_pipes():
-    global _TEXT_PIPE, _IMG2IMG_PIPE, _HED_NET
+    global _TEXT_PIPE, _IMG2IMG_PIPE, _HED_NET, _DEXINED_NET
     _TEXT_PIPE = None
     _IMG2IMG_PIPE = None
     _HED_NET = None
+    _DEXINED_NET = None
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
@@ -219,6 +222,46 @@ def _load_hed():
     return _HED_NET
 
 
+def _load_dexined():
+    global _DEXINED_NET
+    if _DEXINED_NET is not None:
+        return _DEXINED_NET
+    checkpoint = os.getenv("DEXINED_CHECKPOINT", "/app/dexined/10_model.pth")
+    if not os.path.exists(checkpoint):
+        raise RuntimeError("A DexiNed checkpoint nem található.")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("[InkForge] Loading DexiNed edge model")
+    model = DexiNed().to(device)
+    state = torch.load(checkpoint, map_location=device)
+    if isinstance(state, dict) and "state_dict" in state:
+        state = state["state_dict"]
+    if isinstance(state, dict):
+        state = {k.replace("module.", "", 1): v for k, v in state.items()}
+    model.load_state_dict(state, strict=True)
+    model.eval()
+    _DEXINED_NET = model
+    print("[InkForge] DexiNed ready")
+    return _DEXINED_NET
+
+
+def _dexined_edges(pil: Image.Image) -> np.ndarray:
+    """Official DexiNed architecture/checkpoint inference, restored to source size."""
+    rgb = np.array(pil.convert("RGB"))
+    h, w = rgb.shape[:2]
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR).astype(np.float32)
+    bgr -= np.array([103.939, 116.779, 123.68], dtype=np.float32)
+    tensor = torch.from_numpy(bgr.transpose(2, 0, 1)).unsqueeze(0).float()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tensor = tensor.to(device)
+    model = _load_dexined()
+    with torch.inference_mode():
+        outputs = model(tensor)
+        logits = outputs[-1]
+        edge = torch.sigmoid(logits)[0, 0].detach().float().cpu().numpy()
+    edge = cv2.resize(edge, (w, h), interpolation=cv2.INTER_CUBIC)
+    return np.clip(edge, 0.0, 1.0).astype(np.float32)
+
+
 def _hed_edges(pil: Image.Image) -> np.ndarray:
     bgr = cv2.cvtColor(np.array(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
     h, w = bgr.shape[:2]
@@ -250,36 +293,52 @@ def _remove_border_components(mask: np.ndarray) -> np.ndarray:
 
 
 def _professional_line_drawing(pil: Image.Image) -> np.ndarray:
+    """Professional tattoo line art: DexiNed + HED fusion + adaptive thinning."""
     rgb = np.array(pil.convert("RGB"))
     h, w = rgb.shape[:2]
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    gray = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8)).apply(gray)
-    gray = cv2.bilateralFilter(gray, 7, 30, 30)
+    gray = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8)).apply(gray)
+    gray = cv2.bilateralFilter(gray, 7, 28, 28)
 
+    # Two independent learned edge maps: DexiNed carries fine structure;
+    # HED contributes stable multi-scale object boundaries.
+    dexi = _dexined_edges(pil)
     hed = _hed_edges(pil)
-    strong = (hed >= 0.27).astype(np.uint8) * 255
-    detail = (hed >= 0.43).astype(np.uint8) * 255
+    score = (0.68 * dexi) + (0.32 * hed)
 
-    grad = cv2.Canny(gray, 70, 150, apertureSize=3, L2gradient=True)
-    grad = cv2.GaussianBlur(grad, (3, 3), 0)
+    # Adaptive threshold keeps the strongest structural contours without
+    # turning tonal regions into solid black shapes.
+    q = float(np.percentile(score, 72.0))
+    threshold = float(np.clip(q, 0.22, 0.46))
+    strong = (score >= threshold).astype(np.uint8) * 255
+
+    # Recover only high-confidence fine detail that is also supported by a
+    # local gradient. This is deliberately conservative for tattoo transfer.
+    grad = cv2.Canny(gray, 65, 145, apertureSize=3, L2gradient=True)
+    detail = ((score >= max(0.42, threshold + 0.06)).astype(np.uint8) * 255)
     supported_detail = cv2.bitwise_and(detail, grad)
-
     mask = cv2.bitwise_or(strong, supported_detail)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
+
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
     mask = _thin_mask(mask)
     mask = _remove_border_components(mask)
 
+    # Connected-component filtering: remove isolated photographic noise while
+    # preserving long contours and meaningful facial/animal features.
     num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     out = np.zeros_like(mask)
-    min_area = max(12, int(h * w * 0.000010))
-    max_area = int(h * w * 0.10)
+    min_area = max(10, int(h * w * 0.000008))
+    max_area = int(h * w * 0.12)
     for idx in range(1, num):
         area = int(stats[idx, cv2.CC_STAT_AREA])
         bw = int(stats[idx, cv2.CC_STAT_WIDTH])
         bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
-        if min_area <= area <= max_area and (max(bw, bh) >= 20 or area >= 24):
+        if min_area <= area <= max_area and (max(bw, bh) >= 18 or area >= 22):
             out[labels == idx] = 255
+
     return out
 
 
@@ -463,7 +522,7 @@ def handler(job: dict):
             "quality": quality,
             "verdictText": verdict,
             "seed": seed,
-            "model": "HED-BSDS + adaptive contour thinning",
+            "model": "DexiNed + HED + adaptive contour thinning",
             "gpu_ms": int((time.time() - started) * 1000),
         }
 

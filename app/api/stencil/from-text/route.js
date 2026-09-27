@@ -3,7 +3,7 @@
 // GET  /api/stencil/from-text?id=... -> RunPod status
 
 import { runpodReady, runpodRun, runpodStatus, extractRunpodOutput, extractRunpodBase64 } from '../../../../lib/runpod-client.js';
-import { buildPromptFromDescription, styleTail } from '../../../../lib/prompt.js';
+import { buildPromptFromDescription, styleTail } from '../../../../lib/prompt.js';\nimport { translatePromptToEnglish } from '../../../../lib/prompt-translate.js';
 import { stencilInsertRow, stencilUpdateRow, creditEntry, CREDIT_COST, STATUS, costUsd } from '../../../../lib/save.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -44,7 +44,7 @@ export async function POST(req) {
     const bodyPart=body.body_part||null;
     const styleSlug=body.style_slug||'linework';
     const title=String(body.title||description).slice(0,80);
-    const built=buildPromptFromDescription(description,{bodyPart,styleTail:styleTail(styleSlug)});
+    const normalized=await translatePromptToEnglish(description);\n    const built=buildPromptFromDescription(normalized.text,{bodyPart,styleTail:styleTail(styleSlug)});
 
     const created=await sbInsert('stencils',stencilInsertRow({
       userId:body.user_id||null,studioId:body.studio_id||null,title,sourceType:'ai',
@@ -70,7 +70,7 @@ export async function POST(req) {
     return Response.json({
       ok:true,runpodId:start.id,runpodStatus:start.status||'IN_QUEUE',
       stencilId,studioId:body.studio_id||null,userId:body.user_id||null,
-      widthMm,heightMm,dpi,title,prompt:built.prompt,embeddedText:built.embeddedText,style:styleSlug
+      widthMm,heightMm,dpi,title,prompt:built.prompt,embeddedText:built.embeddedText,style:styleSlug,\n      promptLanguage:normalized.source,translatedPrompt:normalized.translated
     });
   }catch(e){
     return Response.json({ok:false,error:String(e&&e.message?e.message:e)},{status:500});

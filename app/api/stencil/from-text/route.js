@@ -1,16 +1,19 @@
 // ============================================================
-// INKFORGE — GENERALAS SZOVEGBOL
+// INKFORGE — SZOVEGBOL KEP ES STENCIL
 // POST /api/stencil/from-text
 //
-// 1) prompt osszeallitasa (targy + stilus)
-// 2) Runpod: text-to-image -> minta
-// 3) opcionalis: image-to-image -> stencil
+// A vevo leirja, mit akar:
+//   "koponya szarnyakkal, alatta szalag, a szalagon PRO PATRIA"
+//
+// 1) prompt epites (a leiras + stencil-stilus)
+// 2) Runpod: text-to-image -> kesz kep
+// 3) Runpod: image-to-image -> vonalas stencil
 // 4) mentes: stencils (source_type='ai', source_prompt), credit_ledger
 // ============================================================
 
-import { runpodText, runpodLineart, runpodReady } from '../../../lib/runpod-client.js';
 import { enqueue, jobStatus, jobResult, queueStats } from '../../../lib/queue.js';
-import { buildPrompt, runpodPayload, buildConvertPrompt, presetBySlug } from '../../../lib/template.js';
+import { runpodText, runpodLineart, runpodReady } from '../../../lib/runpod-client.js';
+import { buildPromptFromDescription, styleTail } from '../../../lib/prompt.js';
 import {
   stencilInsertRow, stencilUpdateRow, creditEntry,
   buildNames, storagePaths, BUCKET, CREDIT_COST, STATUS, costUsd
@@ -74,19 +77,19 @@ export async function POST(req) {
     const body = await req.json();
     const userId = body.user_id;
     const studioId = body.studio_id || null;
-    const subject = String(body.subject || '').trim();
+    const description = String(body.description || '').trim();
     const styleSlug = body.style_slug || 'linework';
     const widthMm = parseFloat(body.width_mm || '100');
     const dpi = parseInt(body.dpi || '300', 10);
     const count = Math.max(1, Math.min(4, parseInt(body.count || '1', 10)));
-    const lang = body.lang || 'hu';
-    const title = String(body.title || subject || 'ai-minta').slice(0, 80);
+    const bodyPart = body.body_part || null;
+    const title = String(body.title || description || 'ai-minta').slice(0, 80);
 
     if (!userId) {
       return Response.json({ ok: false, error: 'Hianyzo user_id.' }, { status: 400 });
     }
-    if (!subject && !body.prompt) {
-      return Response.json({ ok: false, error: 'Irj be egy targyat (pl. rozsa, farkas, hullam).' }, { status: 400 });
+    if (description.length < 4) {
+      return Response.json({ ok: false, error: 'Irj le, mit abrazoljon (par szo eleg).' }, { status: 400 });
     }
     if (!runpodReady()) {
       return Response.json({
@@ -96,8 +99,11 @@ export async function POST(req) {
       }, { status: 503 });
     }
 
-    const built = buildPrompt(subject, styleSlug, { lang: lang });
-    const preset = presetBySlug(styleSlug);
+    const built = buildPromptFromDescription(description, {
+      bodyPart: bodyPart,
+      styleTail: styleTail(styleSlug),
+      detail: body.detail === true
+    });
 
     // Kezdo sor: queued, source_type = 'ai'
     const created = await sbInsert('stencils', stencilInsertRow({
@@ -113,35 +119,35 @@ export async function POST(req) {
       if (stencilId) await sbPatch('stencils', stencilId, { status: STATUS.processing });
 
       const t0 = Date.now();
-      let gen;
       try {
-        // 1) Minta generalasa szovegbol
-        gen = await runpodText({ prompt: built.prompt, negative: built.negative, count: count });
+        // 1) KEP generalasa a leirasbol
+        const gen = await runpodText({
+          prompt: built.prompt,
+          negative: built.negative,
+          count: count
+        });
 
-        // 2) Stencil-konverzio a generalt képbol
-        const conv = await runpodLineart(gen.imageUrl || gen.imageBlob, {
+        // 2) STENCIL a generalt kepbol
+        const conv = await runpodLineart(gen.imageBlob || gen.imageUrl, {
           mode: 'lineart', maxDim: 2000,
           targetCoverage: 0.06, bridges: true, bridgeWidth: 2
         });
 
         const totalMs = Date.now() - t0;
         const gpuMs = (gen.ms || 0) + (conv.ms || 0);
+        const heightMm = Math.round(widthMm * conv.height / conv.width * 100) / 100;
 
         const names = buildNames(title, widthMm, dpi);
         const paths = storagePaths(studioId, names);
-        const pngBytes = Buffer.from(conv.png_base64, 'base64');
-
-        const pngPath = await sbUpload(paths.png, pngBytes, 'image/png');
+        const pngPath = await sbUpload(paths.png, Buffer.from(conv.png_base64, 'base64'), 'image/png');
         const srcPath = gen.pngBase64
           ? await sbUpload(paths.base + '-eredeti.png', Buffer.from(gen.pngBase64, 'base64'), 'image/png')
           : null;
 
-        const heightMm = Math.round(widthMm * conv.height / conv.width * 100) / 100;
-
         if (stencilId) {
           await sbPatch('stencils', stencilId, stencilUpdateRow({
             status: STATUS.ready,
-            branchUsed: 'runpod-ai-' + (preset ? preset.slug : 'lineart'),
+            branchUsed: 'ai-' + styleSlug,
             coverage: conv.coverage,
             previewPath: pngPath,
             gpuMs: gpuMs
@@ -156,14 +162,14 @@ export async function POST(req) {
 
         return {
           id: stencilId,
+          description: description,
           prompt: built.prompt,
-          style: preset ? preset.slug : null,
+          embeddedText: built.embeddedText,
+          style: styleSlug,
           png_base64: conv.png_base64,
           source_png_base64: gen.pngBase64 || null,
-          width: conv.width, height: conv.height,
-          height_mm: heightMm,
-          coverage: conv.coverage,
-          quality: conv.quality,
+          width: conv.width, height: conv.height, height_mm: heightMm,
+          coverage: conv.coverage, quality: conv.quality,
           ms: totalMs, gpuMs: gpuMs,
           aiCostUsd: costUsd(gpuMs),
           stored: { png: pngPath, source: srcPath }
@@ -173,14 +179,15 @@ export async function POST(req) {
         if (stencilId) await sbPatch('stencils', stencilId, stencilUpdateRow({ status: STATUS.failed, error: msg }));
         throw e;
       }
-    }, { mode: 'ai-text', subject: subject });
+    }, { mode: 'ai-text', description: description });
 
     return Response.json({
       ok: true,
       jobId: jobId,
       stencilId: stencilId,
       prompt: built.prompt,
-      style: preset ? { slug: preset.slug, hu: preset.hu, en: preset.en } : null,
+      embeddedText: built.embeddedText,
+      style: styleSlug,
       queue: queueStats()
     });
   } catch (e) {

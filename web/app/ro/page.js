@@ -1,11 +1,11 @@
-import { getDictionary, makeT, getFontClass } from '../lib/i18n/config';
-import Nav from '../components/Nav';
-import HomeContent from '../components/HomeContent';
+import { getDictionary, makeT, getFontClass } from '../../lib/i18n/config';
+import Nav from '../../../components/Nav';
+import HomeContent from '../../../components/HomeContent';
 
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return [{ lang: 'hu' }, { lang: 'en' }, { lang: 'de' }, { lang: 'ar' }];
+  return [{ lang: 'hu' }];
 }
 
 export function generateMetadata({ params }) {
@@ -13,14 +13,13 @@ export function generateMetadata({ params }) {
   return { title: 'InkForge – ' + t('home.tagline') };
 }
 
-export default function LangHomePage({ params }) {
+export default function Page({ params }) {
   const lang = params.lang;
   const t = makeT(getDictionary(lang));
   const fontClass = getFontClass(lang);
-  const dir = lang === 'ar' || lang === 'he' ? 'rtl' : 'ltr';
 
   return (
-    <div className={fontClass} dir={dir} lang={lang}>
+    <div className={fontClass} dir="ltr" lang={lang}>
       <Nav lang={lang} t={t} />
       <HomeContent t={t} lang={lang} />
       <footer className="border-t border-stone-800 px-6 py-8 text-xs text-stone-600">

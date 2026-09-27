@@ -1,14 +1,11 @@
-import { T } from '../../../_shared';
-
-export default function Page({ params }) {
-  const lang = params.lang;
-  const t = T(lang);
+// Forgalmazok admin — NULLA import.
+export default function Page() {
   return (
-    <div lang={lang}>
+    <div>
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <a href={'/' + lang + '/admin'} className="text-sm text-stone-500 hover:text-amber-400">{t.back}</a>
+        <a href="/hu/admin" className="text-sm text-stone-500 hover:text-amber-400">Vissza</a>
         <h1 className="mt-4 text-2xl font-semibold tracking-tight">Forgalmazok</h1>
-        <p className="mt-6 text-sm text-stone-500">{t.adminNote}</p>
+        <p className="mt-6 text-sm text-stone-500">A Supabase kapcsolat utan aktiv.</p>
       </main>
     </div>
   );

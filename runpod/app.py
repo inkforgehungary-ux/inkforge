@@ -1,24 +1,25 @@
 # ============================================================
-# INKFORGE STENCIL AI ENGINE — Runpod GPU
-# FastAPI: foto -> vonalas stencil (lineart)
+# INKFORGE STENCIL AI ENGINE — Runpod Serverless
+# ============================================================
+# KOLTSEG-MODELL: csak generalaskor fizetsz.
 #
-# MERESI TANULSAGOK (valodi fotokon):
-#  - A fix XDoG kuszob (1/255 = 0.0039) HASZNALHATATLAN:
-#    a keppontok 99%-at vonalnak veszi -> 100% vagy 46% fedettseg.
-#  - A helyes megoldas: a VALASZ ELOSZLASABOL szamolt AUTO-KUSZOB.
-#    Valodi fotón a 94. percentilis: 0.1154 -> 5% fedettseg.
-#  - Cel-fedettseg 4-10%, ez a nyomtathato stencil tartomany.
+#  - Min Workers = 0  -> ures jaratban NINCS futo GPU, nulla kiadas
+#  - Idle Timeout = 5 -> ennyi mp utan a worker elalszik
+#  - A /health valasz tartalmazza a fogyasztast (generations, gpu_ms)
+#
+# Egy generalas GPU-ideje: ~5-15 mp (A4000-en) ~ 0.002 USD.
 # ============================================================
 
 import base64
 import time
+import threading
 import numpy as np
 import cv2
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-api = FastAPI(title="InkForge Stencil AI", version="2.0.0")
+api = FastAPI(title="InkForge Stencil AI", version="2.1.0")
 
 api.add_middleware(
     CORSMiddleware,
@@ -28,7 +29,7 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
-ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION = "2.1.0"
 CUDA_AVAILABLE = False
 GPU_NAME = None
 try:
@@ -38,6 +39,22 @@ try:
         GPU_NAME = torch.cuda.get_device_name(0)
 except Exception:
     torch = None
+
+# ---------- Koltseg-kovetes ----------
+_usage_lock = threading.Lock()
+_usage = {
+    "generations": 0,
+    "gpu_ms_total": 0,
+    "last_request": None,
+    "started": time.time(),
+}
+
+
+def _record_usage(ms: int):
+    with _usage_lock:
+        _usage["generations"] += 1
+        _usage["gpu_ms_total"] += int(ms)
+        _usage["last_request"] = time.time()
 
 
 # ------------------------------------------------------------
@@ -92,20 +109,16 @@ def remove_small(mask, min_area):
 
 
 # ------------------------------------------------------------
-# 1. VONALRAJZ — AUTO-KUSZOB (ez a lenyeg)
+# 1. VONALRAJZ — AUTO-KUSZOB (a fo ag)
 # ------------------------------------------------------------
 
 def lineart_engine(gray: np.ndarray, opts: dict):
-    """
-    Foto -> vonalas rajz.
-    A kuszob a VALASZ ELOSZLASABOL szamol — nem fix ertek.
-    """
+    """Foto -> tiszta vonalas rajz, satirozas NELKUL."""
     sigma = float(opts.get("sigma", 1.2))
     k = float(opts.get("k", 2.0))
     target = float(opts.get("targetCoverage", 0.06))
     min_area = int(opts.get("minArea", 6))
 
-    # Lokalis kontraszt a halvany reszletekhez
     if opts.get("clahe", True):
         gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
 
@@ -113,15 +126,11 @@ def lineart_engine(gray: np.ndarray, opts: dict):
     g1 = cv2.GaussianBlur(g, (0, 0), sigma)
     g2 = cv2.GaussianBlur(g, (0, 0), sigma * k)
 
-    # A vonal-JEL: mennyivel masabb a ket blur.
-    # Ez robusztus — nem a nyers XDoG kuszob, hanem az elteres nagysaga.
     response = np.abs(g1 - g2)
 
-    # AUTO-KUSZOB a valasz-eloszlasbol
     flat = response.ravel()
     n = len(flat)
-    idx = int(n * target)
-    idx = max(0, min(n - 1, idx))
+    idx = max(0, min(n - 1, int(n * target)))
     if idx > 0:
         thr = float(np.partition(flat, n - idx - 1)[n - idx - 1])
     else:
@@ -133,7 +142,7 @@ def lineart_engine(gray: np.ndarray, opts: dict):
 
 
 # ------------------------------------------------------------
-# 2. KONTUR — tiszta korvonal
+# 2. KONTUR
 # ------------------------------------------------------------
 
 def contour_engine(gray: np.ndarray, opts: dict):
@@ -152,7 +161,7 @@ def contour_engine(gray: np.ndarray, opts: dict):
 
 
 # ------------------------------------------------------------
-# 3. TOMEG — sziluett
+# 3. TOMEG
 # ------------------------------------------------------------
 
 def mass_engine(gray: np.ndarray, opts: dict):
@@ -168,10 +177,10 @@ def mass_engine(gray: np.ndarray, opts: dict):
 
 
 # ------------------------------------------------------------
-# 4. HIDAK — a sablon egyben marad
+# 4. HIDAK
 # ------------------------------------------------------------
 
-def add_bridges(mask: np.ndarray, thickness: int = 2, max_len_ratio: float = 0.10):
+def add_bridges(mask, thickness=2, max_len_ratio=0.10):
     h, w = mask.shape
     max_len = int(max(w, h) * max_len_ratio)
     num, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
@@ -202,7 +211,7 @@ def add_bridges(mask: np.ndarray, thickness: int = 2, max_len_ratio: float = 0.1
 
 
 # ------------------------------------------------------------
-# Vegpontok
+# VEGPONTOK
 # ------------------------------------------------------------
 
 @api.get("/")
@@ -212,10 +221,19 @@ def root():
 
 @api.get("/health")
 def health():
+    with _usage_lock:
+        u = dict(_usage)
     return {
-        "ok": True, "engine": ENGINE_VERSION,
-        "cuda": CUDA_AVAILABLE, "gpu": GPU_NAME,
+        "ok": True,
+        "engine": ENGINE_VERSION,
+        "cuda": CUDA_AVAILABLE,
+        "gpu": GPU_NAME,
         "torch": getattr(torch, "__version__", None) if torch else None,
+        "usage": {
+            "generations": u["generations"],
+            "gpu_ms_total": u["gpu_ms_total"],
+            "uptime_s": int(time.time() - u["started"]),
+        },
     }
 
 
@@ -258,6 +276,9 @@ async def stencil(
                "tul fedett" if coverage > 40 else
                "hidakkal javithato" if islands > 1 else "hasznalhato")
 
+    ms = int((time.time() - t0) * 1000)
+    _record_usage(ms)
+
     return JSONResponse({
         "ok": True, "mode": mode, "engine": ENGINE_VERSION,
         "cuda": CUDA_AVAILABLE,
@@ -266,7 +287,7 @@ async def stencil(
         "threshold": round(thr, 5),
         "bridges": bridges_n, "islands": islands,
         "quality": quality,
-        "ms": int((time.time() - t0) * 1000),
+        "ms": ms,
         "png_base64": base64.b64encode(encode_png(mask, transparency)).decode("ascii"),
     })
 
@@ -279,7 +300,7 @@ async def stencil_svg(
     max_dim: int = Form(2000),
     target_coverage: float = Form(0.06),
 ):
-    """Foto -> SVG, mm-pontos meretben."""
+    t0 = time.time()
     raw = await image.read()
     img = resize_cap(decode_image(raw), max(256, min(4096, max_dim)))
     gray = to_gray(img)
@@ -312,9 +333,13 @@ async def stencil_svg(
         '<path fill="#000000" stroke="none" d="%s"/>\n</svg>\n'
     ) % (width_mm, height_mm, width_mm, height_mm, " ".join(parts))
 
+    ms = int((time.time() - t0) * 1000)
+    _record_usage(ms)
+
     return JSONResponse({
         "ok": True, "width_mm": round(width_mm, 3),
-        "height_mm": round(height_mm, 3), "paths": len(parts), "svg": svg,
+        "height_mm": round(height_mm, 3),
+        "paths": len(parts), "ms": ms, "svg": svg,
     })
 
 

@@ -84,7 +84,7 @@ export async function GET(req) {
   if(!id)return Response.json({ok:false,error:'Hiányzó RunPod id.'},{status:400});
 
   try{
-    const st=await runpodStatus(id,{text:false});
+    const st=await runpodStatus(id,{text:true});
     const status=String(st.status||'').toUpperCase();
     const failed=['FAILED','ERROR','CANCELLED','TIMED_OUT'].includes(status);
     if(!['COMPLETED','SUCCESS'].includes(status)&&!failed)return Response.json({ok:true,ready:false,status,runpodId:id});

@@ -19,7 +19,7 @@ import runpod
 from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 
-ENGINE_VERSION = "3.1.0"
+ENGINE_VERSION = "3.2.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
 DEFAULT_SIZE = int(os.getenv("RUNPOD_DEFAULT_SIZE", "768"))
 DEFAULT_STEPS = int(os.getenv("RUNPOD_DEFAULT_STEPS", "22"))
@@ -28,6 +28,7 @@ MODEL_CACHE = os.getenv("HF_HOME", "/workspace/huggingface")
 _PIPE_LOCK = threading.Lock()
 _TEXT_PIPE = None
 _IMG2IMG_PIPE = None
+_HED_NET = None
 
 LINEART_NEGATIVE = (
     "photorealistic, photograph, grey shading, grayscale shading, gradients, "
@@ -36,9 +37,10 @@ LINEART_NEGATIVE = (
 )
 
 def _free_pipes():
-    global _TEXT_PIPE, _IMG2IMG_PIPE
+    global _TEXT_PIPE, _IMG2IMG_PIPE, _HED_NET
     _TEXT_PIPE = None
     _IMG2IMG_PIPE = None
+    _HED_NET = None
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
@@ -200,6 +202,87 @@ def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
     # Never dilate: output is intentionally a one-pixel line stencil.
     return out
 
+def _load_hed():
+    global _HED_NET
+    if _HED_NET is not None:
+        return _HED_NET
+    proto = os.getenv("HED_PROTOTXT", "/app/hed/deploy.prototxt")
+    weights = os.getenv("HED_WEIGHTS", "/app/hed/hed_pretrained_bsds.caffemodel")
+    if not (os.path.exists(proto) and os.path.exists(weights)):
+        raise RuntimeError("A HED modell fajljai nem találhatók.")
+    print("[InkForge] Loading HED edge model")
+    net = cv2.dnn.readNetFromCaffe(proto, weights)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+    _HED_NET = net
+    print("[InkForge] HED ready")
+    return _HED_NET
+
+
+def _hed_edges(pil: Image.Image) -> np.ndarray:
+    bgr = cv2.cvtColor(np.array(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
+    h, w = bgr.shape[:2]
+    blob = cv2.dnn.blobFromImage(
+        bgr, scalefactor=1.0, size=(500, 500),
+        mean=(104.00698793, 116.66876762, 122.67891434),
+        swapRB=False, crop=False
+    )
+    net = _load_hed()
+    net.setInput(blob)
+    out = net.forward()
+    edge = cv2.resize(out[0, 0], (w, h), interpolation=cv2.INTER_CUBIC)
+    return np.clip(edge, 0.0, 1.0).astype(np.float32)
+
+
+def _remove_border_components(mask: np.ndarray) -> np.ndarray:
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    h, w = mask.shape
+    out = np.zeros_like(mask)
+    for idx in range(1, num):
+        x = int(stats[idx, cv2.CC_STAT_LEFT])
+        y = int(stats[idx, cv2.CC_STAT_TOP])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        if x <= 0 or y <= 0 or x + bw >= w or y + bh >= h:
+            continue
+        out[labels == idx] = 255
+    return out
+
+
+def _professional_line_drawing(pil: Image.Image) -> np.ndarray:
+    rgb = np.array(pil.convert("RGB"))
+    h, w = rgb.shape[:2]
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8)).apply(gray)
+    gray = cv2.bilateralFilter(gray, 7, 30, 30)
+
+    hed = _hed_edges(pil)
+    strong = (hed >= 0.27).astype(np.uint8) * 255
+    detail = (hed >= 0.43).astype(np.uint8) * 255
+
+    grad = cv2.Canny(gray, 70, 150, apertureSize=3, L2gradient=True)
+    grad = cv2.GaussianBlur(grad, (3, 3), 0)
+    supported_detail = cv2.bitwise_and(detail, grad)
+
+    mask = cv2.bitwise_or(strong, supported_detail)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
+    mask = _thin_mask(mask)
+    mask = _remove_border_components(mask)
+
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    out = np.zeros_like(mask)
+    min_area = max(12, int(h * w * 0.000010))
+    max_area = int(h * w * 0.10)
+    for idx in range(1, num):
+        area = int(stats[idx, cv2.CC_STAT_AREA])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        if min_area <= area <= max_area and (max(bw, bh) >= 20 or area >= 24):
+            out[labels == idx] = 255
+    return out
+
+
 def _pencil_line_drawing(pil: Image.Image) -> np.ndarray:
     """Deterministic pencil/contour drawing: only essential thin black lines, no filled regions."""
     rgb = np.array(pil.convert("RGB"))
@@ -355,14 +438,14 @@ def handler(job: dict):
     source = None
     generated = None
 
-    if mode in ("image_to_stencil", "image_to_image", "image_to_image_stencil"):
+    if mode in ("image_to_stencil", "image_to_image", "image_to_image_stencil", "image_to_drawing"):
         source = _prepare_image(
             _decode_b64_image(str(inp.get("image_base64") or "")),
             max_side,
         )
 
     if mode == "image_to_drawing":
-        mask = _pencil_line_drawing(source)
+        mask = _professional_line_drawing(source)
         coverage, islands, quality, verdict = _metrics(mask)
         stencil_b64 = _mask_png(mask)
         return {
@@ -380,7 +463,7 @@ def handler(job: dict):
             "quality": quality,
             "verdictText": verdict,
             "seed": seed,
-            "model": "OpenCV-contour-pencil-v1",
+            "model": "HED-BSDS + adaptive contour thinning",
             "gpu_ms": int((time.time() - started) * 1000),
         }
 

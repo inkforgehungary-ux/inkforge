@@ -167,21 +167,79 @@ def _thin_mask(mask: np.ndarray) -> np.ndarray:
                     changed = True
         return (img*255).astype(np.uint8)
 
+def _clean_photo_stencil(pil: Image.Image) -> np.ndarray:
+    """Clean photo/reference stencil using learned edges plus aggressive speckle rejection."""
+    rgb = np.array(pil.convert("RGB"))
+    h, w = rgb.shape[:2]
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    gray = cv2.createCLAHE(clipLimit=1.4, tileGridSize=(8, 8)).apply(gray)
+    gray = cv2.bilateralFilter(gray, 9, 32, 32)
+
+    # Learned multi-scale edges provide structure; Canny is used only as
+    # local confirmation so photographic texture is not copied wholesale.
+    dexi = _dexined_edges(pil)
+    hed = _hed_edges(pil)
+    score = 0.70 * dexi + 0.30 * hed
+
+    threshold = float(np.clip(np.percentile(score, 84.0), 0.34, 0.56))
+    semantic = (score >= threshold).astype(np.uint8) * 255
+
+    grad = cv2.Canny(gray, 85, 175, apertureSize=3, L2gradient=True)
+    grad = cv2.dilate(grad, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
+
+    # Keep strong learned contours and only high-confidence local detail.
+    detail = (score >= max(0.48, threshold + 0.055)).astype(np.uint8) * 255
+    mask = cv2.bitwise_or(
+        cv2.bitwise_and(semantic, grad),
+        cv2.bitwise_and(detail, grad)
+    )
+
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
+    mask = _thin_mask(mask)
+    mask = _remove_border_components(mask)
+
+    # Stronger filtering than the legacy Canny-only path: isolated pixels and
+    # tiny photographic texture fragments are not useful tattoo transfer lines.
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    out = np.zeros_like(mask)
+    min_area = max(18, int(h * w * 0.000025))
+    max_area = int(h * w * 0.10)
+
+    for idx in range(1, num):
+        area = int(stats[idx, cv2.CC_STAT_AREA])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        if area < min_area or area > max_area:
+            continue
+        if max(bw, bh) >= 30 or area >= 45:
+            out[labels == idx] = 255
+
+    return out
+
+
 def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
+    # Direct uploaded references use the professional learned-edge stencil
+    # path. AI-generated sources keep the lightweight Canny path below.
+    if source_mode == "image_to_stencil":
+        return _clean_photo_stencil(pil)
+
     rgb = np.array(pil.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-
-    # Strong blur suppresses photographic micro-texture before edge detection.
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
     if source_mode in ("text_to_stencil", "image_to_image_stencil"):
-        # Only contours. Never threshold the image into filled black areas.
         edges = cv2.Canny(gray, 110, 220, apertureSize=3, L2gradient=True)
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
         mask = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     else:
-        # Direct photo/reference tracing: conservative edge extraction.
         edges = cv2.Canny(gray, 90, 200, apertureSize=3, L2gradient=True)
         mask = cv2.morphologyEx(
             edges,
@@ -189,10 +247,8 @@ def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
         )
 
-    # Thin every surviving contour to a single clean stroke.
     mask = _thin_mask(mask)
 
-    # Remove speckles, but keep meaningful tattoo contours.
     num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     out = np.zeros_like(mask)
     min_area = max(6, int(mask.shape[0] * mask.shape[1] * 0.000008))
@@ -202,7 +258,6 @@ def _stencil_mask(pil: Image.Image, source_mode: str) -> np.ndarray:
         if min_area <= area <= max_area:
             out[labels == idx] = 255
 
-    # Never dilate: output is intentionally a one-pixel line stencil.
     return out
 
 def _load_hed():

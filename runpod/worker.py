@@ -913,8 +913,8 @@ def handler(job: dict):
             oh = max(64, int(round(mask.shape[0] * scale)))
             mask = cv2.resize(mask, (ow, oh), interpolation=cv2.INTER_NEAREST)
 
-        mask, qc_history = _repair_stencil(mask, style=str(inp.get("style") or "stencil"), max_passes=int(inp.get("max_passes") or 4))
-    coverage, islands, quality, verdict, qc_detail = _metrics(mask)
+        mask, qc_history = _repair_stencil(mask, style=drawing_style, max_passes=int(inp.get("max_passes") or 4))
+        coverage, islands, quality, verdict, qc_detail = _metrics(mask)
         stencil_b64 = _mask_png(mask)
         return {
             "ok": True,
@@ -931,6 +931,8 @@ def handler(job: dict):
             "islands": islands,
             "quality": quality,
             "verdictText": verdict,
+            "qc": qc_detail,
+            "qc_history": qc_history,
             "seed": seed,
             "model": "DexiNed + HED + adaptive contour thinning",
             "gpu_ms": int((time.time() - started) * 1000),
@@ -986,7 +988,12 @@ def handler(job: dict):
         mask = _professional_line_drawing(stencil_source, stencil_style)
     else:
         mask = _stencil_mask(stencil_source, mode)
-    coverage, islands, quality, verdict = _metrics(mask)
+    mask, qc_history = _repair_stencil(
+        mask,
+        style=str(inp.get("style") or "stencil"),
+        max_passes=int(inp.get("max_passes") or 4),
+    )
+    coverage, islands, quality, verdict, qc_detail = _metrics(mask)
     stencil_b64 = _mask_png(mask)
 
     result = {
@@ -1002,6 +1009,8 @@ def handler(job: dict):
         "islands": islands,
         "quality": quality,
         "verdictText": verdict,
+        "qc": qc_detail,
+        "qc_history": qc_history,
         "seed": seed,
         "model": MODEL_ID,
         "gpu_ms": int((time.time() - started) * 1000),

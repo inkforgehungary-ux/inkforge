@@ -277,7 +277,9 @@ def _load_hed():
     proto = os.getenv("HED_PROTOTXT", "/app/hed/deploy.prototxt")
     weights = os.getenv("HED_WEIGHTS", "/app/hed/hed_pretrained_bsds.caffemodel")
     if not (os.path.exists(proto) and os.path.exists(weights)):
-        raise RuntimeError("A HED modell fajljai nem találhatók.")
+        print("[InkForge] HED model assets missing; HED branch disabled, continuing with DexiNed/Canny.")
+        _HED_NET = False
+        return None
     print("[InkForge] Loading HED edge model")
     net = cv2.dnn.readNetFromCaffe(proto, weights)
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)

@@ -35,6 +35,6 @@ print(f"[InkForge] DexiNed checkpoint: {p.stat().st_size} bytes")
 assert p.is_file() and p.stat().st_size > 1024, f"Missing/invalid DexiNed asset: {p}"
 PY
 
-COPY designly_engine.py router.py worker.py .
+COPY designly_spec.py designly_engine.py router.py worker.py .
 
 CMD ["python3", "-u", "worker.py"]

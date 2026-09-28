@@ -318,6 +318,7 @@ export default function StencilTool({ lang }) {
     const uploadFile = await compressForRunpod(f);
     const fd = new FormData();
     fd.append('image', uploadFile);
+        fd.append('style', drawingStyle);
     fd.append('mode', imageMode);
     fd.append('target_coverage', '0.06');
     fd.append('max_dim', '1024');
@@ -327,6 +328,7 @@ export default function StencilTool({ lang }) {
     fd.append('dpi', String(dpi));
     fd.append('title', title || (f.name || 'stencil').replace(/\.[^.]+$/, ''));
     if (imagePrompt.trim()) fd.append('prompt', imagePrompt.trim());
+        fd.append('output_max_side', '2048');
 
     const res = await fetch('/api/stencil/generate', { method: 'POST', body: fd });
     const out = await res.json().catch(function () { return {}; });

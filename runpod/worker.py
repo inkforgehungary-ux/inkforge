@@ -860,10 +860,55 @@ def _generate_img2img(source: Image.Image, prompt: str, negative: str, width: in
         ).images[0]
     return image
 
+
+def _generate_text_raw(prompt: str, negative: str, width: int, height: int, steps: int, guidance: float, seed: int):
+    pipe = _load_text_pipe()
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+    with torch.inference_mode():
+        return pipe(
+            prompt=prompt,
+            negative_prompt=negative or "",
+            width=width,
+            height=height,
+            num_inference_steps=steps,
+            guidance_scale=guidance,
+            generator=generator,
+        ).images[0]
+
+def _generate_img2img_raw(source: Image.Image, prompt: str, negative: str, width: int, height: int, steps: int, guidance: float, strength: float, seed: int):
+    pipe = _load_img2img_pipe()
+    source = source.resize((width, height), Image.Resampling.LANCZOS)
+    generator = torch.Generator(device="cpu").manual_seed(seed)
+    with torch.inference_mode():
+        return pipe(
+            prompt=prompt,
+            negative_prompt=negative or "",
+            image=source,
+            strength=max(0.15, min(0.85, strength)),
+            num_inference_steps=steps,
+            guidance_scale=guidance,
+            generator=generator,
+        ).images[0]
+
 def handler(job: dict):
     started = time.time()
     inp: dict[str, Any] = job.get("input") or {}
     mode = str(inp.get("mode") or "image_to_stencil").strip().lower()
+
+    # Route Designly before legacy InkForge mode validation.
+    if mode.startswith("designly.") or mode in {"designly", "poster", "business_card", "flyer", "menu", "social_post", "logo", "merch", "streamer", "vector", "web_design", "image_edit", "upscale", "template"}:
+        if not torch.cuda.is_available():
+            raise RuntimeError("RunPod workerben nem érhető el CUDA GPU.")
+        designly_result = route_request(
+            inp,
+            generate_text=_generate_text_raw,
+            generate_img2img=_generate_img2img_raw,
+            decode_image=_decode_b64_image,
+            prepare_image=_prepare_image,
+            encode_png=_encode_png,
+        )
+        if designly_result is not None:
+            return designly_result
 
     if mode not in {
         "text_to_image",

@@ -17,6 +17,7 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance, ImageFilter
+from designly_spec import plan_website, design_system, site_graph
 
 
 DESIGNLY_MODES = {
@@ -275,6 +276,45 @@ def handle_designly(
     encode_png: Callable,
 ) -> dict:
     mode = _category(inp)
+    if mode.startswith("designly."):
+        operation = mode.split(".", 1)[1]
+        if operation in {"website_generate", "website_edit", "website_redesign", "image_to_website", "website_variation"}:
+            prompt = _clean(inp.get("prompt") or "Create a premium professional website")
+            plan = plan_website(prompt, inp)
+            ds = design_system(inp)
+            graph = site_graph(plan, inp)
+            return {
+                "ok": True,
+                "engine": "designly",
+                "mode": mode,
+                "project_id": (inp.get("project") or {}).get("id"),
+                "base_version": (inp.get("project") or {}).get("version", 1),
+                "new_version": (inp.get("project") or {}).get("version", 1) + 1,
+                "artifacts": {
+                    "website_plan": plan,
+                    "design_system": ds,
+                    "site_graph": graph,
+                    "page_specs": graph["pages"],
+                    "asset_requests": plan["asset_requests"],
+                },
+                "patch": {"files_added": [], "files_modified": [], "files_deleted": []},
+                "warnings": ["Code execution is intentionally outside the GPU worker."],
+                "errors": [],
+            }
+        if operation in {"section_generate", "component_generate"}:
+            return {
+                "ok": True,
+                "engine": "designly",
+                "mode": mode,
+                "artifact": {
+                    "type": operation.replace("_generate", ""),
+                    "name": _clean(inp.get("name") or "GeneratedComponent"),
+                    "prompt": _clean(inp.get("prompt")),
+                    "props": inp.get("props") or {},
+                },
+                "warnings": [],
+                "errors": [],
+            }
     category = mode
     if category == "designly":
         category = _category({"category": (inp.get("inputs") or {}).get("category") or "poster"})

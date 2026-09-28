@@ -12,7 +12,7 @@ def route(
     encode_png,
 ):
     mode = str((inp or {}).get("mode") or "").strip().lower()
-    if mode in DESIGNLY_MODES:
+    if mode in DESIGNLY_MODES or mode.startswith("designly."):
         return handle_designly(
             inp,
             generate_text=generate_text,

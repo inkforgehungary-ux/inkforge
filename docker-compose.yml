@@ -1,0 +1,11 @@
+services:
+  inkforge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inkforge
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "3000:3000"

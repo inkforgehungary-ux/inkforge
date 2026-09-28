@@ -658,27 +658,160 @@ def _mask_png(mask: np.ndarray) -> str:
         raise RuntimeError("A stencil PNG kódolása sikertelen.")
     return base64.b64encode(buf.tobytes()).decode("ascii")
 
-def _metrics(mask: np.ndarray):
+def _qc_metrics(mask: np.ndarray):
+    """Detailed QC metrics used by the automatic repair loop."""
     h, w = mask.shape
-    coverage = float(np.count_nonzero(mask)) / float(max(1, w * h)) * 100.0
-    num, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    islands = sum(
-        1 for i in range(1, num)
-        if stats[i, cv2.CC_STAT_AREA] >= 30
-    )
-    if coverage < 0.7:
-        quality = "tul ritka"
-        verdict = "Túl kevés vonal maradt. Erősebb kontraszt vagy másik forráskép kell."
-    elif coverage > 18:
-        quality = "tul fedett"
-        verdict = "Túl sok vonal maradt. Erősebb egyszerűsítés javasolt."
-    elif islands > 8:
-        quality = "hidakkal javithato"
-        verdict = "Több különálló rész maradt; finom tisztítás vagy bridge segíthet."
+    area = float(max(1, h * w))
+    black = int(np.count_nonzero(mask))
+    coverage = black / area * 100.0
+
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    components = max(0, num - 1)
+    small = 0
+    lengths = []
+    border = 0
+    border_px = max(2, int(round(min(h, w) * 0.003)))
+
+    for i in range(1, num):
+        a = int(stats[i, cv2.CC_STAT_AREA])
+        bw = int(stats[i, cv2.CC_STAT_WIDTH])
+        bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+        if a < 30 or max(bw, bh) < 18:
+            small += 1
+        x = int(stats[i, cv2.CC_STAT_LEFT])
+        y = int(stats[i, cv2.CC_STAT_TOP])
+        if x <= border_px or y <= border_px or x + bw >= w - border_px or y + bh >= h - border_px:
+            border += a
+
+        component = labels == i
+        ys, xs = np.where(component)
+        if len(xs) > 1:
+            lengths.append(float(max(xs.max() - xs.min(), ys.max() - ys.min())))
+
+    isolated_ratio = float(small / max(1, components))
+    avg_line_length = float(np.mean(lengths)) if lengths else 0.0
+    short_ratio = float(sum(1 for x in lengths if x < max(18, min(h, w) * 0.025)) / max(1, len(lengths)))
+    border_contamination = border / max(1, black)
+
+    if coverage > 20.0:
+        verdict = "OVERFILLED"
+    elif isolated_ratio > 0.62 or short_ratio > 0.55:
+        verdict = "TOO_MUCH_NOISE"
+    elif coverage < 0.45:
+        verdict = "TOO_FEW_LINES"
+    elif border_contamination > 0.08:
+        verdict = "BROKEN_LINES"
+    elif coverage > 13.0:
+        verdict = "TOO_MANY_LINES"
     else:
-        quality = "hasznalhato"
-        verdict = "Éles, nyomtatható stencil-vonalrajz."
-    return round(coverage, 2), islands, quality, verdict
+        verdict = "GOOD" if coverage >= 0.7 and components > 0 else "ACCEPTABLE"
+
+    line_density = float(sum(lengths) / max(1.0, area) * 1000.0)
+
+    return {
+        "coverage": round(coverage, 3),
+        "components": components,
+        "islands": components,
+        "isolated_ratio": round(isolated_ratio, 4),
+        "avg_line_length": round(avg_line_length, 2),
+        "short_line_ratio": round(short_ratio, 4),
+        "border_contamination": round(border_contamination, 4),
+        "line_density": round(line_density, 5),
+        "verdict": verdict,
+    }
+
+
+def _repair_stencil(mask: np.ndarray, style: str = "stencil", max_passes: int = 4):
+    """Automatic QC repair; returns the highest scoring acceptable stencil."""
+    best = mask.copy()
+    history = []
+
+    for pass_index in range(max(1, min(5, int(max_passes)))):
+        metrics = _qc_metrics(best)
+        history.append({"pass": pass_index + 1, **metrics})
+
+        if metrics["verdict"] in ("GOOD", "ACCEPTABLE"):
+            return best, history
+
+        work = best.copy()
+        verdict = metrics["verdict"]
+
+        if verdict in ("TOO_MUCH_NOISE", "TOO_MANY_LINES"):
+            # Remove small texture, close only meaningful gaps, then re-thin.
+            k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+            work = cv2.morphologyEx(work, cv2.MORPH_OPEN, k)
+            num, labels, stats, _ = cv2.connectedComponentsWithStats(work, connectivity=8)
+            clean = np.zeros_like(work)
+            min_area = max(16, int(work.shape[0] * work.shape[1] * 0.00002))
+            for i in range(1, num):
+                area = int(stats[i, cv2.CC_STAT_AREA])
+                bw = int(stats[i, cv2.CC_STAT_WIDTH])
+                bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+                if area >= min_area and max(bw, bh) >= 22:
+                    clean[labels == i] = 255
+            work = _thin_mask(clean)
+
+        elif verdict == "TOO_FEW_LINES":
+            # Recover moderate-strength local edges from the source mask itself.
+            work = cv2.dilate(work, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
+            work = _thin_mask(work)
+
+        elif verdict == "BROKEN_LINES":
+            work = cv2.morphologyEx(
+                work,
+                cv2.MORPH_CLOSE,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+            )
+            work = _thin_mask(work)
+
+        elif verdict == "OVERFILLED":
+            work = cv2.morphologyEx(
+                work,
+                cv2.MORPH_OPEN,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            )
+            work = _thin_mask(work)
+
+        # Keep the candidate with the better QC score.
+        cand = _qc_metrics(work)
+        current_score = _qc_score(metrics)
+        candidate_score = _qc_score(cand)
+        if candidate_score > current_score:
+            best = work
+
+    return best, history
+
+
+def _qc_score(metrics: dict) -> float:
+    """Higher is better; favors moderate coverage and clean components."""
+    coverage = float(metrics.get("coverage", 0.0))
+    target = 6.0
+    coverage_score = max(0.0, 1.0 - abs(coverage - target) / 10.0)
+    noise_score = max(0.0, 1.0 - float(metrics.get("isolated_ratio", 1.0)))
+    short_score = max(0.0, 1.0 - float(metrics.get("short_line_ratio", 1.0)))
+    border_score = max(0.0, 1.0 - float(metrics.get("border_contamination", 1.0)))
+    return coverage_score * 0.45 + noise_score * 0.25 + short_score * 0.20 + border_score * 0.10
+
+
+def _metrics(mask: np.ndarray):
+    m = _qc_metrics(mask)
+    quality_map = {
+        "GOOD": ("hasznalhato", "Éles, nyomtatható stencil-vonalrajz."),
+        "ACCEPTABLE": ("hasznalhato", "Elfogadható, nyomtatható stencil-vonalrajz."),
+        "TOO_MANY_LINES": ("tul fedett", "Túl sok vonal maradt. Automatikus egyszerűsítés lefutott."),
+        "TOO_MUCH_NOISE": ("tul zajos", "Túl sok apró zaj maradt. Automatikus tisztítás lefutott."),
+        "TOO_FEW_LINES": ("tul ritka", "Túl kevés vonal maradt. Erősebb részlet-visszaadás szükséges."),
+        "BROKEN_LINES": ("toredezett", "Töredezett vonalak maradtak. Automatikus bridge-javítás lefutott."),
+        "OVERFILLED": ("tul fedett", "A stencil túl sűrű; erősebb egyszerűsítés szükséges."),
+    }
+    quality, verdict = quality_map.get(m["verdict"], ("hasznalhato", "Stencil kész."))
+    return (
+        m["coverage"],
+        m["islands"],
+        quality,
+        verdict,
+        m,
+    )
 
 def _target_dimensions(inp: dict, max_side: int) -> tuple[int, int]:
     # Text generation keeps the requested physical aspect ratio.
@@ -780,7 +913,8 @@ def handler(job: dict):
             oh = max(64, int(round(mask.shape[0] * scale)))
             mask = cv2.resize(mask, (ow, oh), interpolation=cv2.INTER_NEAREST)
 
-        coverage, islands, quality, verdict = _metrics(mask)
+        mask, qc_history = _repair_stencil(mask, style=str(inp.get("style") or "stencil"), max_passes=int(inp.get("max_passes") or 4))
+    coverage, islands, quality, verdict, qc_detail = _metrics(mask)
         stencil_b64 = _mask_png(mask)
         return {
             "ok": True,

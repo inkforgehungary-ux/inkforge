@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance, ImageFilter
 from designly_spec import plan_website, design_system, site_graph
+from designly_codegen import generate_project
 
 
 DESIGNLY_MODES = {
@@ -283,6 +284,14 @@ def handle_designly(
             plan = plan_website(prompt, inp)
             ds = design_system(inp)
             graph = site_graph(plan, inp)
+            artifacts = {
+                "website_plan": plan,
+                "design_system": ds,
+                "site_graph": graph,
+                "page_specs": graph["pages"],
+                "asset_requests": plan["asset_requests"],
+            }
+            generated = generate_project(artifacts, inp.get("project") or {})
             return {
                 "ok": True,
                 "engine": "designly",
@@ -290,15 +299,11 @@ def handle_designly(
                 "project_id": (inp.get("project") or {}).get("id"),
                 "base_version": (inp.get("project") or {}).get("version", 1),
                 "new_version": (inp.get("project") or {}).get("version", 1) + 1,
-                "artifacts": {
-                    "website_plan": plan,
-                    "design_system": ds,
-                    "site_graph": graph,
-                    "page_specs": graph["pages"],
-                    "asset_requests": plan["asset_requests"],
-                },
-                "patch": {"files_added": [], "files_modified": [], "files_deleted": []},
-                "warnings": ["Code execution is intentionally outside the GPU worker."],
+                "artifacts": artifacts,
+                "project": generated,
+                "patch": {"files_added": [f["path"] for f in generated["files"]], "files_modified": [], "files_deleted": []},
+                "build": generated["build"],
+                "warnings": ["Generated source is returned as project files; execution remains outside the GPU worker."],
                 "errors": [],
             }
         if operation in {"section_generate", "component_generate"}:

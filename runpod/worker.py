@@ -20,7 +20,7 @@ from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from dexined_model import DexiNed
 
-ENGINE_VERSION = "3.3.0"
+ENGINE_VERSION = "3.4.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
 DEFAULT_SIZE = int(os.getenv("RUNPOD_DEFAULT_SIZE", "768"))
 DEFAULT_STEPS = int(os.getenv("RUNPOD_DEFAULT_STEPS", "22"))
@@ -316,7 +316,16 @@ def _dexined_edges(pil: Image.Image) -> np.ndarray:
     """Official DexiNed architecture/checkpoint inference, restored to source size."""
     rgb = np.array(pil.convert("RGB"))
     h, w = rgb.shape[:2]
-    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR).astype(np.float32)
+    # DexiNed expects spatial dimensions compatible with its stride.
+    work_w = max(16, int(round(w / 16.0) * 16))
+    work_h = max(16, int(round(h / 16.0) * 16))
+    work_w = min(2048, work_w)
+    work_h = min(2048, work_h)
+    if work_w != w or work_h != h:
+        rgb_work = cv2.resize(rgb, (work_w, work_h), interpolation=cv2.INTER_AREA)
+    else:
+        rgb_work = rgb
+    bgr = cv2.cvtColor(rgb_work, cv2.COLOR_RGB2BGR).astype(np.float32)
     bgr -= np.array([103.939, 116.779, 123.68], dtype=np.float32)
     tensor = torch.from_numpy(bgr.transpose(2, 0, 1)).unsqueeze(0).float()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

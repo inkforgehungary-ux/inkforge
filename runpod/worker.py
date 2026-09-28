@@ -19,6 +19,7 @@ import runpod
 from PIL import Image, ImageOps
 from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from dexined_model import DexiNed
+from router import route as route_request
 
 ENGINE_VERSION = "3.4.0"
 MODEL_ID = os.getenv("RUNPOD_MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
@@ -876,6 +877,19 @@ def handler(job: dict):
 
     if not torch.cuda.is_available():
         raise RuntimeError("RunPod workerben nem érhető el CUDA GPU.")
+
+    # Designly is routed to a separate creative engine. The existing InkForge
+    # stencil branches below are intentionally left unchanged.
+    designly_result = route_request(
+        inp,
+        generate_text=_generate_text,
+        generate_img2img=_generate_img2img,
+        decode_image=_decode_b64_image,
+        prepare_image=_prepare_image,
+        encode_png=_encode_png,
+    )
+    if designly_result is not None:
+        return designly_result
 
     seed = int(inp.get("seed") or int(time.time() * 1000) % 2147483647)
     max_side = int(inp.get("max_side") or DEFAULT_SIZE)

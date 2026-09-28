@@ -65,7 +65,10 @@ export async function POST(req) {
       target_height_mm:heightMm,
       steps:24,
       guidance:5.5,
-      return_generated:true
+      return_generated:true,
+      style: styleSlug === 'fine_line' || styleSlug === 'linework' ? 'line' : (
+        ['stencil','hatching','bold','soft'].includes(styleSlug) ? styleSlug : 'stencil'
+      )
     }, { text: true });
 
     if(stencilId)await sbPatch('stencils',stencilId,{status:STATUS.processing});

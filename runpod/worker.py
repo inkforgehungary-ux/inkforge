@@ -412,12 +412,70 @@ def _professional_line_drawing(pil: Image.Image) -> np.ndarray:
     return out
 
 
-def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndarray:
-    """DexiNed + HED tattoo drawing profiles.
+def _hysteresis_edges(score: np.ndarray, high_percentile: float, low_ratio: float = 0.42) -> np.ndarray:
+    """Keep weak edge pixels only when connected to strong learned edges."""
+    high = float(np.percentile(score, high_percentile))
+    low = max(0.05, high * float(low_ratio))
+    strong = (score >= high).astype(np.uint8)
+    weak = (score >= low).astype(np.uint8)
 
-    Profiles are InkForge implementations targeting common professional
-    stencil characteristics; they do not reproduce any proprietary service.
-    """
+    num, labels = cv2.connectedComponents(weak, connectivity=8)
+    out = np.zeros_like(weak, dtype=np.uint8)
+    strong_labels = np.unique(labels[strong > 0])
+    strong_labels = strong_labels[strong_labels != 0]
+    if strong_labels.size:
+        keep = np.zeros(num, dtype=np.uint8)
+        keep[strong_labels] = 1
+        out[keep[labels] > 0] = 255
+    return out
+
+
+def _adaptive_component_filter(mask: np.ndarray, score: np.ndarray, style: str) -> np.ndarray:
+    """Score components instead of deleting everything below one hard area cutoff."""
+    h, w = mask.shape
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    out = np.zeros_like(mask)
+
+    thresholds = {
+        "line": 0.42,
+        "soft": 0.48,
+        "stencil": 0.34,
+        "hatching": 0.31,
+        "bold": 0.33,
+    }
+    keep_threshold = thresholds.get(style, 0.40)
+    image_area = float(h * w)
+
+    for idx in range(1, num):
+        area = int(stats[idx, cv2.CC_STAT_AREA])
+        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
+        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
+        if area <= 0:
+            continue
+
+        component = labels == idx
+        mean_conf = float(score[component].mean()) if np.any(component) else 0.0
+        length_bonus = min(0.28, max(bw, bh) / max(1.0, min(h, w)) * 0.30)
+        size_bonus = min(0.18, area / max(1.0, image_area * 0.001) * 0.06)
+        tiny_penalty = 0.28 if max(bw, bh) < 18 and area < 30 else 0.0
+        isolated_penalty = 0.16 if max(bw, bh) < 30 and area < 55 else 0.0
+
+        keep_score = (
+            0.58 * mean_conf
+            + length_bonus
+            + size_bonus
+            - tiny_penalty
+            - isolated_penalty
+        )
+
+        if keep_score >= keep_threshold:
+            out[component] = 255
+
+    return out
+
+
+def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndarray:
+    """Production-oriented tattoo line/stencil extraction."""
     style = str(style or "line").strip().lower()
     if style not in ("line", "stencil", "hatching", "bold", "soft"):
         style = "line"
@@ -426,18 +484,19 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
     h, w = rgb.shape[:2]
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
 
-    clip = 1.5 if style in ("line", "soft") else 1.9
-    sigma = 28 if style in ("line", "soft") else 35
+    # Photo-aware normalization and texture suppression.
+    clip = 1.35 if style in ("line", "soft") else 1.65
     gray = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8)).apply(gray)
-    gray = cv2.bilateralFilter(gray, 7, sigma, sigma)
+    gray = cv2.bilateralFilter(gray, 9, 28 if style != "hatching" else 34, 28 if style != "hatching" else 34)
 
     try:
         dexi = _dexined_edges(pil)
         hed = _hed_edges(pil)
-        score = (0.72 * dexi) + (0.28 * hed)
+        score = (0.70 * dexi) + (0.30 * hed)
+        engine_name = "DexiNed+HED"
     except Exception as exc:
-        print(f"[InkForge] learned edge models unavailable, using safe Canny fallback: {exc}")
-        grad = cv2.Canny(gray, 80, 170, apertureSize=3, L2gradient=True)
+        print(f"[InkForge] learned edge stage failed, using enhanced Canny fallback: {exc}")
+        grad = cv2.Canny(gray, 75, 155, apertureSize=3, L2gradient=True)
         grad = cv2.morphologyEx(
             grad, cv2.MORPH_CLOSE,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
@@ -446,33 +505,48 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
         grad = _remove_border_components(grad)
         return grad
 
-    profiles = {
-        "line":    (80.0, 0.31, 0.54, 78, 158, 0.085, 0.000010, 0.10, 26),
-        "soft":    (84.0, 0.34, 0.57, 82, 165, 0.110, 0.000012, 0.08, 30),
-        "stencil": (69.0, 0.23, 0.45, 60, 140, 0.045, 0.000007, 0.14, 18),
-        "hatching":(66.0, 0.22, 0.44, 58, 138, 0.040, 0.000007, 0.16, 16),
-        "bold":    (73.0, 0.26, 0.48, 62, 145, 0.055, 0.000008, 0.16, 18),
+    # Multi-scale texture suppression: down-weight high-frequency texture
+    # that is not supported by larger structural edges.
+    small = cv2.GaussianBlur(score, (0, 0), 1.0)
+    large = cv2.GaussianBlur(score, (0, 0), 4.0)
+    high_freq = np.clip(score - small, 0.0, 1.0)
+    structure = np.clip(large, 0.0, 1.0)
+    texture_like = (high_freq > 0.035) & (structure < 0.16)
+    score = score.copy()
+    score[texture_like] *= 0.28
+
+    # Style-specific adaptive hysteresis thresholds.
+    percentiles = {
+        "line": 92.0,
+        "soft": 94.0,
+        "stencil": 88.0,
+        "hatching": 86.0,
+        "bold": 89.0,
     }
-    percentile, min_threshold, max_threshold, grad_low, grad_high, detail_delta, min_area_ratio, max_area_ratio, min_length = profiles[style]
+    edge_map = _hysteresis_edges(score, percentiles[style], 0.40)
 
-    threshold = float(np.clip(
-        np.percentile(score, percentile),
-        min_threshold,
-        max_threshold
-    ))
-    strong = (score >= threshold).astype(np.uint8) * 255
-
+    grad_low, grad_high = {
+        "line": (78, 158),
+        "soft": (84, 165),
+        "stencil": (62, 142),
+        "hatching": (58, 138),
+        "bold": (64, 148),
+    }[style]
     grad = cv2.Canny(gray, grad_low, grad_high, apertureSize=3, L2gradient=True)
-    detail_threshold = max(0.44, threshold + detail_delta)
-    detail = ((score >= detail_threshold).astype(np.uint8) * 255)
 
-    # Soft outline deliberately drops most fine-detail recovery.
-    if style == "soft":
-        detail = cv2.bitwise_and(detail, cv2.erode(grad, np.ones((2, 2), np.uint8)))
-    else:
-        detail = cv2.bitwise_and(detail, grad)
+    # Local gradient is confirmation, not the primary detector.
+    detail_delta = {
+        "line": 0.10,
+        "soft": 0.12,
+        "stencil": 0.055,
+        "hatching": 0.045,
+        "bold": 0.065,
+    }[style]
+    detail_threshold = max(0.40, float(np.percentile(score, percentiles[style])) + detail_delta)
+    detail = (score >= detail_threshold).astype(np.uint8) * 255
+    detail = cv2.bitwise_and(detail, grad)
 
-    mask = cv2.bitwise_or(strong, detail)
+    mask = cv2.bitwise_or(edge_map, detail)
 
     if style in ("stencil", "hatching", "bold"):
         mask = cv2.morphologyEx(
@@ -480,61 +554,44 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
         )
 
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    )
     mask = _thin_mask(mask)
     mask = _remove_border_components(mask)
 
-    # Standard / Hatching profiles add sparse luminance-guided engraving.
-    if style in ("stencil", "hatching"):
-        tone = cv2.GaussianBlur(
-            cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY),
-            (9, 9),
-            0
-        )
-        dark_percentile = 48 if style == "stencil" else 56
-        dark = (tone < np.percentile(tone, dark_percentile)).astype(np.uint8) * 255
+    # Keep meaningful components using confidence + geometry instead of
+    # a single hard minimum-area rule.
+    mask = _adaptive_component_filter(mask, score, style)
+
+    # Controlled form-following hatching from the smooth tone field only.
+    if style == "hatching":
+        tone = cv2.GaussianBlur(gray, (0, 0), 9)
+        dark = (tone < np.percentile(tone, 58)).astype(np.uint8) * 255
         dark = cv2.morphologyEx(
             dark, cv2.MORPH_OPEN,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
         )
         hatch = np.zeros_like(mask)
-        spacing = max(
-            6 if style == "hatching" else 8,
-            int(round(min(h, w) / (92 if style == "hatching" else 110)))
-        )
+        spacing = max(8, int(round(min(h, w) / 95)))
         for offset in range(-h, w, spacing):
             p1 = (max(offset, 0), max(-offset, 0))
             p2 = (min(w - 1, offset + h), min(h - 1, h + offset))
             cv2.line(hatch, p1, p2, 255, 1, cv2.LINE_AA)
         hatch = cv2.bitwise_and(hatch, dark)
-        hatch = cv2.bitwise_and(
-            hatch,
-            cv2.dilate(mask, np.ones((3 if style == "hatching" else 2, 3 if style == "hatching" else 2), np.uint8))
-        )
-        mask = cv2.bitwise_or(mask, hatch)
-        mask = _thin_mask(mask)
+        hatch = cv2.bitwise_and(hatch, cv2.dilate(mask, np.ones((3, 3), np.uint8)))
+        mask = _thin_mask(cv2.bitwise_or(mask, hatch))
 
-    # Bold profile is still line art: thicken only after semantic filtering.
     if style == "bold":
+        # Weight only the already-filtered skeleton; never fill photographic regions.
         mask = cv2.dilate(
             mask,
             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)),
             iterations=1
         )
 
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    out = np.zeros_like(mask)
-    min_area = max(10, int(h * w * min_area_ratio))
-
-    for idx in range(1, num):
-        area = int(stats[idx, cv2.CC_STAT_AREA])
-        bw = int(stats[idx, cv2.CC_STAT_WIDTH])
-        bh = int(stats[idx, cv2.CC_STAT_HEIGHT])
-        if min_area <= area <= int(h * w * max_area_ratio):
-            if max(bw, bh) >= min_length or area >= 24:
-                out[labels == idx] = 255
-
-    return out
-
+    return mask
 
 def _pencil_line_drawing(pil: Image.Image) -> np.ndarray:
     """Deterministic pencil/contour drawing: only essential thin black lines, no filled regions."""

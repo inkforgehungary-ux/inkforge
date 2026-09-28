@@ -427,9 +427,20 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
     gray = cv2.createCLAHE(clipLimit=clip, tileGridSize=(8, 8)).apply(gray)
     gray = cv2.bilateralFilter(gray, 7, sigma, sigma)
 
-    dexi = _dexined_edges(pil)
-    hed = _hed_edges(pil)
-    score = (0.72 * dexi) + (0.28 * hed)
+    try:
+        dexi = _dexined_edges(pil)
+        hed = _hed_edges(pil)
+        score = (0.72 * dexi) + (0.28 * hed)
+    except RuntimeError as exc:
+        print(f"[InkForge] learned edge models unavailable, using safe Canny fallback: {exc}")
+        grad = cv2.Canny(gray, 80, 170, apertureSize=3, L2gradient=True)
+        grad = cv2.morphologyEx(
+            grad, cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+        )
+        grad = _thin_mask(grad)
+        grad = _remove_border_components(grad)
+        return grad
 
     profiles = {
         "line":    (80.0, 0.31, 0.54, 78, 158, 0.085, 0.000010, 0.10, 26),

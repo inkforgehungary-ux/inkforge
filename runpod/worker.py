@@ -339,6 +339,8 @@ def _hed_edges(pil: Image.Image) -> np.ndarray:
         swapRB=False, crop=False
     )
     net = _load_hed()
+    if net is None:
+        return np.zeros((h, w), dtype=np.float32)
     net.setInput(blob)
     out = net.forward()
     edge = cv2.resize(out[0, 0], (w, h), interpolation=cv2.INTER_CUBIC)
@@ -433,7 +435,7 @@ def _professional_line_drawing(pil: Image.Image, style: str = "line") -> np.ndar
         dexi = _dexined_edges(pil)
         hed = _hed_edges(pil)
         score = (0.72 * dexi) + (0.28 * hed)
-    except RuntimeError as exc:
+    except Exception as exc:
         print(f"[InkForge] learned edge models unavailable, using safe Canny fallback: {exc}")
         grad = cv2.Canny(gray, 80, 170, apertureSize=3, L2gradient=True)
         grad = cv2.morphologyEx(
@@ -777,7 +779,13 @@ def handler(job: dict):
     else:
         stencil_source = source
 
-    mask = _stencil_mask(stencil_source, mode)
+    if mode == "text_to_stencil":
+        stencil_style = str(inp.get("style") or "stencil").strip().lower()
+        if stencil_style not in ("line", "stencil", "hatching", "bold", "soft"):
+            stencil_style = "stencil"
+        mask = _professional_line_drawing(stencil_source, stencil_style)
+    else:
+        mask = _stencil_mask(stencil_source, mode)
     coverage, islands, quality, verdict = _metrics(mask)
     stencil_b64 = _mask_png(mask)
 

@@ -177,9 +177,19 @@ def _clean_photo_stencil(pil: Image.Image) -> np.ndarray:
 
     # Learned multi-scale edges provide structure; Canny is used only as
     # local confirmation so photographic texture is not copied wholesale.
-    dexi = _dexined_edges(pil)
-    hed = _hed_edges(pil)
-    score = 0.70 * dexi + 0.30 * hed
+    try:
+        dexi = _dexined_edges(pil)
+        hed = _hed_edges(pil)
+        score = 0.70 * dexi + 0.30 * hed
+    except RuntimeError as exc:
+        # Keep the service usable if an edge-model asset is unavailable.
+        # The Docker build validates these assets, so this is only a safety
+        # fallback for a partially updated/old serverless worker.
+        print(f"[InkForge] learned edge model unavailable, using Canny fallback: {exc}")
+        grad = cv2.Canny(gray, 85, 175, apertureSize=3, L2gradient=True)
+        mask = _thin_mask(grad)
+        mask = _remove_border_components(mask)
+        return mask
 
     threshold = float(np.clip(np.percentile(score, 84.0), 0.34, 0.56))
     semantic = (score >= threshold).astype(np.uint8) * 255

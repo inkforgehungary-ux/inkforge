@@ -340,7 +340,7 @@ export default function StencilTool({ lang }) {
 
     const done = out.ready ? out : await waitRunpod('/api/stencil/generate', out);
     if (done.failed) throw new Error(done.error || 'A generálás sikertelen.');
-    if (!done.png_base64 && !done.image_base64) throw new Error('A Wantera AI nem adott vissza képet.');
+    if (!done.png_base64 && !done.image_base64) throw new Error('A RunPod worker nem adott vissza képet.');
     await finishFromGpuPng(done.png_base64 || done.image_base64, done);
   }
 
@@ -351,7 +351,7 @@ export default function StencilTool({ lang }) {
       const hp = await fetch('/api/stencil/health');
       const h = await hp.json();
       setEngineMode(h.mode || 'browser');
-      const gpuOn = h.mode === 'runpod' || h.mode === 'runpod-public' || h.mode === 'runpod-wantera';
+      const gpuOn = !!(h.runpod && h.runpod.api_key_configured && h.runpod.stencil_worker_configured);
       if (!gpuOn) throw new Error('A RunPod GPU motor nincs beállítva. Az InkForge most kizárólag RunPoddal generál.');
 
       if (tab === 'text') {
@@ -424,7 +424,7 @@ export default function StencilTool({ lang }) {
 
         const done = out.ready ? out : await waitRunpod('/api/stencil/from-url', out);
         if (done.failed) throw new Error(done.error || 'A generálás sikertelen.');
-        if (!done.png_base64 && !done.image_base64) throw new Error('A Wantera AI nem adott vissza képet.');
+        if (!done.png_base64 && !done.image_base64) throw new Error('A RunPod worker nem adott vissza képet.');
         await finishFromGpuPng(done.png_base64 || done.image_base64, done);
 
       } else {

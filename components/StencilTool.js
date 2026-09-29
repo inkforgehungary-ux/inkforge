@@ -384,8 +384,10 @@ export default function StencilTool({ lang }) {
         }
         if (out.embeddedText) setInfo('Felismerve: ' + out.embeddedText);
 
-        const done = await waitRunpod('/api/stencil/from-text', out);
-        await finishFromGpuPng(done.png_base64, done);
+        const done = out.ready
+          ? out
+          : await waitRunpod('/api/stencil/from-text', out);
+        await finishFromGpuPng(done.png_base64 || done.image_base64, done);
 
       } else if (tab === 'drawing') {
         if (!file) throw new Error('Tölts fel egy képet.');

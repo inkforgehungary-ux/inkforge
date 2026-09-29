@@ -1,53 +1,49 @@
-// INKFORGE — ENGINE HEALTH (v4)
-// Egyetlen olcso health-check: /health. Nem inditunk /run vagy /runsync tesztjobot.
+// INKFORGE — ENGINE HEALTH (v5)
+// Public health endpoint: configuration presence + upstream health only.
+// Never exposes URLs, key prefixes, Supabase service-key state, or upstream response bodies.
 
 export async function GET() {
-  const stencilUrl = process.env.RUNPOD_STENCIL_URL || process.env.RUNPOD_TEXT_URL || null;
-  const textUrl = process.env.RUNPOD_TEXT_URL || process.env.RUNPOD_STENCIL_URL || null;
+  const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
+  const textUrl = process.env.RUNPOD_TEXT_URL || null;
   const key = process.env.RUNPOD_API_KEY || '';
-  const hasKey = !!key;
-  const sbUrl = process.env.SUPABASE_URL || null;
-  const sbKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   const out = {
     ok: true,
-    engine: '3.0.0',
+    engine: '3.4.2',
     worker_contract: 'runpod-serverless',
     runpod: {
-      configured: !!(stencilUrl && hasKey),
-      stencil_url: stencilUrl,
-      text_url: textUrl,
-      has_api_key: hasKey,
-      key_prefix: key ? key.slice(0, 6) + '...' : null,
-      probes: []
+      configured: !!(stencilUrl && key),
+      text_configured: !!(textUrl && key),
+      health: null
     },
-    supabase: { configured: !!(sbUrl && sbKey), url: sbUrl, has_service_key: sbKey },
-    mode: (stencilUrl && hasKey) ? 'runpod' : 'browser'
+    mode: (stencilUrl && key) ? 'runpod' : 'unconfigured'
   };
 
-  if (!stencilUrl || !hasKey) return Response.json(out);
+  if (!stencilUrl || !key) return Response.json(out);
 
-  const base = stencilUrl.replace(/\/+$/, '');
+  const base = stencilUrl.replace(/\\/+$/, '');
   const t0 = Date.now();
   try {
     const r = await fetch(base + '/health', {
-      headers: { 'Authorization': 'Bearer ' + key },
-      signal: AbortSignal.timeout(8000)
+      headers: { Authorization: 'Bearer ' + key },
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store'
     });
-    const body = await r.text();
     out.runpod.health = {
-      status: r.status,
       ok: r.ok,
-      ms: Date.now() - t0,
-      body: body.slice(0, 500)
+      status: r.status,
+      ms: Date.now() - t0
     };
   } catch (e) {
     out.runpod.health = {
       ok: false,
+      status: 0,
       ms: Date.now() - t0,
-      error: String(e && e.message ? e.message : e).slice(0, 200)
+      error: 'RunPod health nem elerheto.'
     };
   }
 
-  return Response.json(out);
+  return Response.json(out, {
+    headers: { 'Cache-Control': 'no-store' }
+  });
 }

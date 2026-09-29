@@ -22,8 +22,9 @@ export async function GET() {
     return Response.json(out, { headers: { 'Cache-Control': 'no-store' } });
   }
 
-  const base = stencilUrl.replace(/\\/+$/, '');
+  const base = stencilUrl.replace(/\/+$/, '');
   const t0 = Date.now();
+
   try {
     const r = await fetch(base + '/health', {
       headers: { Authorization: 'Bearer ' + key },
@@ -31,6 +32,7 @@ export async function GET() {
       cache: 'no-store'
     });
     const body = await r.text();
+
     out.runpod.health = {
       ok: r.ok,
       status: r.status,

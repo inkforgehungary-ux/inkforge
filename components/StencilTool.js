@@ -437,7 +437,7 @@ export default function StencilTool({ lang }) {
       clearInterval(iv);
       setBusy(false); setStage('');
     }
-  }, [tab, file, description, imageUrl, widthMm, heightMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt, drawingStyle]);
+  }, [tab, file, description, imageUrl, widthMm, heightMm, dpi, styleSlug, bodyPart, title, imageMode, imagePrompt, drawingStyle, textMode]);
 
   
   function drawCross(ctx, x, y, half, lineWidth) {

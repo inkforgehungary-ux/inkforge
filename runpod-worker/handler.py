@@ -1,44 +1,13 @@
 import base64
 import io
-import os
 from typing import Any
 
 import cv2
 import numpy as np
 import runpod
-import torch
-from PIL import Image, ImageOps
-from reportlab.pdfgen import canvas
+from PIL import Image
 from reportlab.lib.pagesizes import A4
-from diffusers import StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
-
-MODEL_ID = os.getenv("MODEL_ID", "stabilityai/stable-diffusion-xl-base-1.0")
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-DTYPE = torch.float16 if DEVICE == "cuda" else torch.float32
-_pipe = None
-_img2img = None
-
-
-def load_pipelines():
-    global _pipe, _img2img
-    if _pipe is not None:
-        return
-
-    if DEVICE != "cuda":
-        raise RuntimeError("RunPod worker requires a CUDA GPU.")
-
-    common = dict(
-        torch_dtype=DTYPE,
-        use_safetensors=True,
-        variant="fp16",
-    )
-    _pipe = StableDiffusionXLPipeline.from_pretrained(MODEL_ID, **common)
-    _pipe = _pipe.to("cuda")
-    _pipe.enable_attention_slicing()
-
-    _img2img = StableDiffusionXLImg2ImgPipeline.from_pretrained(MODEL_ID, **common)
-    _img2img = _img2img.to("cuda")
-    _img2img.enable_attention_slicing()
+from reportlab.pdfgen import canvas
 
 
 def decode_image(value: str) -> Image.Image:
@@ -48,116 +17,80 @@ def decode_image(value: str) -> Image.Image:
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
-def image_b64(image: Image.Image, fmt="PNG") -> str:
+def image_b64(image: Image.Image, fmt: str = "PNG") -> str:
     buf = io.BytesIO()
     image.save(buf, format=fmt)
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def generate_text_image(prompt: str, negative: str, job: dict) -> Image.Image:
-    load_pipelines()
-    width = int(job.get("width", 1024))
-    height = int(job.get("height", 1024))
-    steps = int(job.get("steps", 30))
-    guidance = float(job.get("guidance", 7.0))
-    seed = int(job.get("seed", -1))
-    generator = None
-    if seed >= 0:
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-
-    result = _pipe(
-        prompt=prompt,
-        negative_prompt=negative,
-        width=width,
-        height=height,
-        num_inference_steps=steps,
-        guidance_scale=guidance,
-        generator=generator,
-    )
-    return result.images[0]
-
-
-def generate_img2img(source: Image.Image, prompt: str, negative: str, job: dict) -> Image.Image:
-    load_pipelines()
-    max_side = int(job.get("max_side", 1024))
-    source.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
-    w, h = source.size
-    w = max(64, (w // 8) * 8)
-    h = max(64, (h // 8) * 8)
-    source = source.resize((w, h), Image.Resampling.LANCZOS)
-
-    steps = int(job.get("steps", 30))
-    guidance = float(job.get("guidance", 7.0))
-    strength = float(job.get("strength", 0.65))
-    seed = int(job.get("seed", -1))
-    generator = None
-    if seed >= 0:
-        generator = torch.Generator(device="cuda").manual_seed(seed)
-
-    result = _img2img(
-        prompt=prompt,
-        negative_prompt=negative,
-        image=source,
-        strength=max(0.05, min(0.95, strength)),
-        num_inference_steps=steps,
-        guidance_scale=guidance,
-        generator=generator,
-    )
-    return result.images[0]
-
-
-def make_stencil(image: Image.Image) -> Image.Image:
+def make_stencil(image: Image.Image, threshold_low: int = 55, threshold_high: int = 145,
+                 min_component_area: int = 10) -> Image.Image:
     rgb = np.array(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    edges = cv2.Canny(gray, 55, 145)
+    edges = cv2.Canny(gray, threshold_low, threshold_high)
     kernel = np.ones((2, 2), np.uint8)
     edges = cv2.dilate(edges, kernel, iterations=1)
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    # White background + clean black tattoo lines.
     out = np.full_like(gray, 255)
     out[edges > 0] = 0
 
-    # Remove tiny specks.
-    n, labels, stats, _ = cv2.connectedComponentsWithStats((out == 0).astype(np.uint8), 8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(
+        (out == 0).astype(np.uint8), 8
+    )
     for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] < 10:
+        if stats[i, cv2.CC_STAT_AREA] < min_component_area:
             out[labels == i] = 255
 
     return Image.fromarray(out, mode="L").convert("RGB")
 
 
-def contour_paths(stencil: Image.Image):
+def contour_paths(stencil: Image.Image, simplify: float = 0.8):
     arr = np.array(stencil.convert("L"))
     binary = (arr < 128).astype(np.uint8) * 255
-    contours, _ = cv2.findContours(binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours, _ = cv2.findContours(
+        binary, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE
+    )
+
     paths = []
     for contour in contours:
         if len(contour) < 2:
             continue
+        epsilon = max(0.1, float(simplify))
+        contour = cv2.approxPolyDP(contour, epsilon, False)
         points = contour[:, 0, :]
-        paths.append(points)
+        if len(points) >= 2:
+            paths.append(points)
     return paths
 
 
-def make_svg(stencil: Image.Image) -> bytes:
+def make_svg(stencil: Image.Image, stroke_width: float = 1.2) -> bytes:
     w, h = stencil.size
-    paths = []
+    path_xml = []
+
     for points in contour_paths(stencil):
-        d = "M " + " ".join(f"{int(x)},{int(y)}" for x, y in points) + " Z"
-        paths.append(f'<path d="{d}" fill="none" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>')
+        d = f"M {int(points[0][0])},{int(points[0][1])}"
+        for x, y in points[1:]:
+            d += f" L {int(x)},{int(y)}"
+        path_xml.append(
+            f'<path d="{d}" fill="none" stroke="#000" '
+            f'stroke-width="{stroke_width}" stroke-linecap="round" '
+            f'stroke-linejoin="round"/>'
+        )
+
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}"><rect width="100%" height="100%" fill="white"/>'
-        + "".join(paths)
+        f'viewBox="0 0 {w} {h}">'
+        f'<rect width="100%" height="100%" fill="white"/>'
+        + "".join(path_xml)
         + "</svg>"
     )
     return svg.encode("utf-8")
 
 
-def make_pdf(stencil: Image.Image) -> bytes:
+def make_pdf(stencil: Image.Image, stroke_width: float = 0.7) -> bytes:
     w, h = stencil.size
     page_w, page_h = A4
     margin = 28
@@ -168,6 +101,8 @@ def make_pdf(stencil: Image.Image) -> bytes:
     buf = io.BytesIO()
     pdf = canvas.Canvas(buf, pagesize=A4)
     pdf.setTitle("InkForge Stencil")
+
+    pdf.setLineWidth(stroke_width)
 
     for points in contour_paths(stencil):
         if len(points) < 2:
@@ -184,54 +119,54 @@ def make_pdf(stencil: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def build_outputs(stencil: Image.Image) -> dict:
+def build_outputs(stencil: Image.Image, stroke_width: float = 1.2,
+                  simplify: float = 0.8) -> dict:
     return {
         "stencil_png_base64": image_b64(stencil),
-        "svg_base64": base64.b64encode(make_svg(stencil)).decode("ascii"),
-        "pdf_base64": base64.b64encode(make_pdf(stencil)).decode("ascii"),
+        "svg_base64": base64.b64encode(
+            make_svg(stencil, stroke_width)
+        ).decode("ascii"),
+        "pdf_base64": base64.b64encode(
+            make_pdf(stencil, max(0.1, stroke_width * 0.6))
+        ).decode("ascii"),
         "width": stencil.width,
         "height": stencil.height,
+        "format": "png+svg+pdf",
     }
 
 
 def handler(job: dict) -> dict:
     inp: dict[str, Any] = job.get("input", job)
 
-    mode = inp.get("mode", "text_to_image")
-    prompt = str(inp.get("prompt", "")).strip()
-    negative = str(
-        inp.get(
-            "negative_prompt",
-            "blurry, low quality, text, watermark, logo, deformed anatomy, duplicate lines",
+    mode = str(inp.get("mode", "image_to_stencil"))
+    if mode not in ("image_to_stencil", "stencil", "export"):
+        raise ValueError(
+            "Stencil worker accepts image_to_stencil, stencil or export mode."
         )
-    )
-
-    if mode == "text_to_image":
-        image = generate_text_image(prompt, negative, inp)
-        return {
-            "image_base64": image_b64(image),
-            "png_base64": image_b64(image),
-            "width": image.width,
-            "height": image.height,
-        }
 
     source = decode_image(inp.get("image_base64", ""))
 
-    if mode == "image_to_image":
-        image = generate_img2img(source, prompt, negative, inp)
-        return {"image_base64": image_b64(image), "png_base64": image_b64(image)}
+    max_side = int(inp.get("max_side", 2048))
+    if max(source.size) > max_side:
+        source.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
 
-    if mode in ("image_to_stencil", "image_to_image_stencil"):
-        image = source
-        if mode == "image_to_image_stencil":
-            image = generate_img2img(source, prompt, negative, inp)
-        stencil = make_stencil(image)
-        out = build_outputs(stencil)
-        out["image_base64"] = out["stencil_png_base64"]
-        out["generated_png_base64"] = out["stencil_png_base64"]
-        return out
+    threshold_low = int(inp.get("threshold_low", 55))
+    threshold_high = int(inp.get("threshold_high", 145))
+    min_area = int(inp.get("min_component_area", 10))
+    stroke_width = float(inp.get("stroke_width", 1.2))
+    simplify = float(inp.get("simplify", 0.8))
 
-    raise ValueError(f"Unsupported mode: {mode}")
+    stencil = make_stencil(
+        source,
+        threshold_low=threshold_low,
+        threshold_high=threshold_high,
+        min_component_area=min_area,
+    )
+
+    out = build_outputs(stencil, stroke_width, simplify)
+    out["image_base64"] = out["stencil_png_base64"]
+    out["generated_png_base64"] = out["stencil_png_base64"]
+    return out
 
 
 runpod.serverless.start({"handler": handler})

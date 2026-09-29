@@ -6,6 +6,7 @@ export async function GET() {
   const stencilUrl = process.env.RUNPOD_STENCIL_URL || null;
   const textUrl = process.env.RUNPOD_TEXT_URL || null;
   const key = process.env.RUNPOD_API_KEY || '';
+  const wantera = process.env.INKFORGE_IMAGE_FUNCTION_URL || 'https://mxrgdcvmxzhocbdhtlhg.supabase.co/functions/v1/inkforge-image';
 
   const out = {
     ok: true,
@@ -13,6 +14,7 @@ export async function GET() {
     worker_contract: 'runpod-public-plus-serverless-stencil',
     runpod: {
       api_key_configured: !!key,
+      wantera_ai_configured: !!wantera,
       public_models_configured: !!key,
       stencil_worker_configured: !!(stencilUrl && key),
       text_worker_configured: !!(textUrl && key),
@@ -22,7 +24,7 @@ export async function GET() {
       },
       health: null
     },
-    mode: key ? 'runpod-public' : 'unconfigured'
+    mode: wantera ? 'runpod-wantera' : (key ? 'runpod-public' : 'unconfigured')
   };
 
   if (!stencilUrl || !key) return Response.json(out, { headers: { 'Cache-Control': 'no-store' } });

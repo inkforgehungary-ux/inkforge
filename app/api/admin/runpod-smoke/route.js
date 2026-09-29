@@ -36,7 +36,7 @@ export async function POST(req) {
   };
 
   try {
-    const res = await fetch(ENDPOINT.replace(/\\/+$/, '') + '/run', {
+    const res = await fetch(ENDPOINT.replace(/\/+$/, '') + '/run', {
       method: 'POST',
       headers: headers(),
       body: JSON.stringify({ input }),
@@ -51,7 +51,7 @@ export async function POST(req) {
 
     return Response.json({
       ok: res.ok,
-      endpoint: ENDPOINT.replace(/\\/+$/, ''),
+      endpoint: ENDPOINT.replace(/\/+$/, ''),
       httpStatus: res.status,
       response: body
     }, { status: res.ok ? 200 : res.status });
@@ -71,7 +71,7 @@ export async function GET(req) {
 
   try {
     const res = await fetch(
-      ENDPOINT.replace(/\\/+$/, '') + '/status/' + encodeURIComponent(id),
+      ENDPOINT.replace(/\/+$/, '') + '/status/' + encodeURIComponent(id),
       {
         headers: { 'Authorization': 'Bearer ' + process.env.RUNPOD_API_KEY },
         signal: AbortSignal.timeout(20000)
@@ -86,7 +86,7 @@ export async function GET(req) {
 
     return Response.json({
       ok: res.ok,
-      endpoint: ENDPOINT.replace(/\\/+$/, ''),
+      endpoint: ENDPOINT.replace(/\/+$/, ''),
       requestId: id,
       httpStatus: res.status,
       response: body

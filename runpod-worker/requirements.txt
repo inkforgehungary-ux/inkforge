@@ -1,0 +1,9 @@
+runpod>=1.7.0
+diffusers>=0.30.0
+transformers>=4.44.0
+accelerate>=0.34.0
+safetensors>=0.4.4
+opencv-python-headless>=4.10.0
+Pillow>=10.4.0
+reportlab>=4.2.0
+numpy>=1.26.4

@@ -1,3 +1,5 @@
+import DesignlyGenerator from '../../../components/DesignlyGenerator';
+
 const TOOLS = [
   ['poster','Plakát','Poszterek és kampányanyagok'],
   ['business-card','Névjegy','Üzleti névjegy és kontaktkártya'],
@@ -44,6 +46,7 @@ export default function DesignlyPage({ params, searchParams }) {
             </a>
           ))}
         </div>
+        <DesignlyGenerator lang={lang} />
         <div className="mt-10 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-stone-800 p-5"><b>AI Editor</b><p className="mt-2 text-sm text-stone-400">Szerkesztés, finomítás és variációk egy munkafolyamatban.</p></div>
           <div className="rounded-2xl border border-stone-800 p-5"><b>Sablonok + Projektek</b><p className="mt-2 text-sm text-stone-400">Mentett munkák és újrahasználható designok egy helyen.</p></div>

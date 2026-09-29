@@ -232,12 +232,15 @@ export default function StencilTool({ lang }) {
       generatedUrl = URL.createObjectURL(new Blob([gbytes], { type: 'image/png' }));
     }
 
-    setPreview(previewSrc);
+    const textImageOnly = extra && extra.mode === 'text_to_image';
+    const displayUrl = textImageOnly && generatedUrl ? generatedUrl : previewSrc;
+
+    setPreview(displayUrl);
     setResult({
-      mask: mask,
+      mask: textImageOnly ? null : mask,
       width: w,
       height: h,
-      url: previewSrc,
+      url: displayUrl,
       generatedUrl: generatedUrl,
       report: {
         branchUsed: extra && extra.mode ? extra.mode : 'runpod',
@@ -260,7 +263,8 @@ export default function StencilTool({ lang }) {
       },
       gpuCoverage: coverage,
       prompt: extra && extra.prompt ? extra.prompt : null,
-      isStencil: !(extra && (extra.mode === 'image_to_image' || extra.mode === 'text_to_image'))
+      isStencil: !(extra && (extra.mode === 'image_to_image' || extra.mode === 'text_to_image')),
+      textImageOnly: textImageOnly
     });
   }
 
@@ -880,16 +884,40 @@ export default function StencilTool({ lang }) {
           {result && (
             <div>
               <div className="knot-rule my-5" />
-              <div className="rounded-xl border border-stone-700 bg-white p-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={result.url} alt="" className="mx-auto block max-h-[420px] w-auto" />
-              </div>
-              {result.generatedUrl && result.isStencil !== false && (
-                <details className="mt-4 rounded-lg border border-stone-800 bg-stone-950/50 px-4 py-3">
-                  <summary className="cursor-pointer text-xs text-stone-400">AI kép előnézete (kép → kép)</summary>
+              {result.textImageOnly ? (
+                <div className="rounded-2xl border border-amber-700/60 bg-stone-950 p-4 shadow-2xl">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-500">AI KÉP ELŐNÉZETE</div>
+                      <div className="mt-1 text-xs text-stone-500">A RunPod által generált kép a megadott prompt alapján.</div>
+                    </div>
+                    <span className="rounded-full border border-emerald-800/60 bg-emerald-950/30 px-2 py-1 text-[10px] text-emerald-400">GENERÁLT</span>
+                  </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={result.generatedUrl} alt="" className="mx-auto mt-3 block max-h-[320px] w-auto rounded-lg" />
-                </details>
+                  <img src={result.url} alt="InkForge AI generált kép" className="mx-auto block max-h-[560px] w-auto rounded-xl border border-stone-800 bg-white object-contain" />
+                </div>
+              ) : (
+                <>
+                  {result.generatedUrl && (
+                    <div className="mb-5 rounded-2xl border border-blue-900/60 bg-stone-950 p-4 shadow-2xl">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">AI KÉP ELŐNÉZETE</div>
+                          <div className="mt-1 text-xs text-stone-500">Ebből a generált képből készül az éles stencil.</div>
+                        </div>
+                        <span className="rounded-full border border-blue-800/60 bg-blue-950/30 px-2 py-1 text-[10px] text-blue-300">ALAPKÉP</span>
+                      </div>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={result.generatedUrl} alt="InkForge AI előnézeti kép" className="mx-auto block max-h-[420px] w-auto rounded-xl border border-stone-800 bg-white object-contain" />
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-amber-700/60 bg-white p-4 shadow-2xl">
+                    <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600">VÉGLEGES STENCIL</div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={result.url} alt="InkForge végleges stencil" className="mx-auto block max-h-[560px] w-auto object-contain" />
+                  </div>
+                </>
               )}
 
               {result.isStencil !== false && (

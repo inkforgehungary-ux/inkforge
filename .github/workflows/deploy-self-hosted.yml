@@ -1,38 +1,11 @@
 name: Deploy InkForge to self-hosted server
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
   deploy:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
-          script_stop: true
-          script: |
-            set -e
-            if [ ! -d /opt/inkforge/.git ]; then
-              rm -rf /opt/inkforge
-              git clone https://github.com/inkforgehungary-ux/inkforge.git /opt/inkforge
-            fi
-            cd /opt/inkforge
-            git fetch origin main
-            git reset --hard origin/main
-            cat > .env.production <<'EOF'
-            RUNPOD_STENCIL_URL=${{ secrets.RUNPOD_STENCIL_URL }}
-            RUNPOD_TEXT_URL=${{ secrets.RUNPOD_TEXT_URL }}
-            RUNPOD_API_KEY=${{ secrets.RUNPOD_API_KEY }}
-            NODE_ENV=production
-            EOF
-            docker compose up -d --build --remove-orphans
-            docker image prune -f
-            curl -fsS http://127.0.0.1:3000/hu/stencil > /dev/null
-            echo "InkForge deploy OK"
+      - run: echo "Self-hosted deployment disabled; InkForge uses GitHub + Vercel + Supabase."

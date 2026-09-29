@@ -338,9 +338,10 @@ export default function StencilTool({ lang }) {
     const out = await res.json().catch(function () { return {}; });
     if (!res.ok || !out.ok) throw new Error(out.error || 'RunPod indítási hiba.');
 
-    setStage('gpu');
-    const done = await waitRunpod('/api/stencil/generate', out);
-    await finishFromGpuPng(done.png_base64, done);
+    const done = out.ready ? out : await waitRunpod('/api/stencil/generate', out);
+    if (done.failed) throw new Error(done.error || 'A generálás sikertelen.');
+    if (!done.png_base64 && !done.image_base64) throw new Error('A Wantera AI nem adott vissza képet.');
+    await finishFromGpuPng(done.png_base64 || done.image_base64, done);
   }
 
   const process = useCallback(async function () {
@@ -421,8 +422,10 @@ export default function StencilTool({ lang }) {
         const out = await res.json();
         if (!out.ok) throw new Error(out.error || 'Hiba');
 
-        const done = await waitRunpod('/api/stencil/from-url', out);
-        await finishFromGpuPng(done.png_base64, done);
+        const done = out.ready ? out : await waitRunpod('/api/stencil/from-url', out);
+        if (done.failed) throw new Error(done.error || 'A generálás sikertelen.');
+        if (!done.png_base64 && !done.image_base64) throw new Error('A Wantera AI nem adott vissza képet.');
+        await finishFromGpuPng(done.png_base64 || done.image_base64, done);
 
       } else {
         if (!file) { setBusy(false); clearInterval(iv); return; }

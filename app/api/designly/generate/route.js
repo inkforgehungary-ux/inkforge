@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runpodRun, waitRunpod, extractRunpodOutput } from '../../../lib/runpod-client';
+import { runpodRun, waitRunpod, extractRunpodOutput } from '../../../../lib/runpod-client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

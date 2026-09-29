@@ -118,21 +118,57 @@ export async function POST(req) {
     }));
     const stencilId = created ? created.id : null;
 
-    // Wantera projekt meglévő professzionális AI lánca.
-    // text_to_image: RunPod Qwen Image.
-    // text_to_stencil: RunPod Qwen Image -> Runware Lineart.
+    // Professzionális kétlépcsős lánc a meglévő Wantera backenddel:
+    // 1. RunPod Qwen Image -> eredeti AI-kép
+    // 2. Runware Lineart -> tiszta, stencilhez használható vonalrajz
+    // Így az AI-kép külön előnézetként is visszaadható, miközben nincs második RunPod generálás.
     const aspectRatio = aspectRatioFor(widthMm, heightMm);
     const generated = await callWanteraImage(
-      mode === 'text_to_image'
-        ? { mode: 'generate', prompt: built.prompt, aspectRatio }
-        : { mode: 'linetrace', prompt: built.prompt, aspectRatio },
+      { mode: 'generate', prompt: built.prompt, aspectRatio },
       req
     );
-    const finalBase64 = await imageUrlToBase64(generated.url);
+    const generatedBase64 = await imageUrlToBase64(generated.url);
+
+    if (mode === 'text_to_image') {
+      if (stencilId) await sbPatch('stencils', stencilId, {
+        status: STATUS.ready,
+        branchUsed: generated.model || 'Wantera RunPod Qwen',
+        coverage: 0,
+        heightMm,
+        gpuMs: 0,
+        error: null
+      });
+      return Response.json({
+        ok: true, ready: true, failed: false,
+        png_base64: generatedBase64,
+        generated_png_base64: generatedBase64,
+        generated_image_url: generated.url,
+        width: Number(generated.width || 1024), height: Number(generated.height || 1024),
+        widthMm, heightMm, dpi, mode,
+        engine: generated.model || 'Wantera InkForge AI',
+        provider: generated.provider || 'Wantera / RunPod',
+        gpuMs: 0, aiCostUsd: Number(generated.providerCostUsd || 0),
+        coverage: 0, bridges: 0, islands: 1,
+        quality: 'ai_kep', verdictText: 'RunPod Qwen Image AI kép elkészült.',
+        prompt: built.prompt, embeddedText: built.embeddedText,
+        promptLanguage: normalized.source, translatedPrompt: normalized.translated, stencilId
+      });
+    }
+
+    const traced = await callWanteraImage(
+      {
+        mode: 'linetrace',
+        image: generated.url,
+        prompt: built.prompt,
+        aspectRatio
+      },
+      req
+    );
+    const finalBase64 = await imageUrlToBase64(traced.url);
 
     if (stencilId) await sbPatch('stencils', stencilId, {
       status: STATUS.ready,
-      branchUsed: generated.model || (mode === 'text_to_image' ? 'Wantera RunPod Qwen' : 'Wantera RunPod Qwen + Runware Lineart'),
+      branchUsed: traced.model || 'Wantera RunPod Qwen + Runware Lineart',
       coverage: 0,
       heightMm,
       gpuMs: 0,
@@ -140,24 +176,20 @@ export async function POST(req) {
     });
 
     return Response.json({
-      ok: true,
-      ready: true,
-      failed: false,
+      ok: true, ready: true, failed: false,
       png_base64: finalBase64,
-      generated_png_base64: mode === 'text_to_image' ? finalBase64 : null,
-      generated_image_url: mode === 'text_to_image' ? generated.url : null,
-      width: Number(generated.width || 1024),
-      height: Number(generated.height || 1024),
+      generated_png_base64: generatedBase64,
+      generated_image_url: generated.url,
+      width: Number(traced.width || generated.width || 1024),
+      height: Number(traced.height || generated.height || 1024),
       widthMm, heightMm, dpi, mode,
-      engine: generated.model || 'Wantera InkForge AI',
-      provider: generated.provider || 'Wantera / RunPod',
+      engine: traced.model || 'Wantera Qwen + Runware Lineart',
+      provider: traced.provider || 'Wantera / Runware',
       gpuMs: 0,
-      aiCostUsd: Number(generated.providerCostUsd || 0),
+      aiCostUsd: Number((generated.providerCostUsd || 0) + (traced.providerCostUsd || 0)),
       coverage: 0, bridges: 0, islands: 1,
-      quality: mode === 'text_to_stencil' ? 'ai_lineart' : 'ai_kep',
-      verdictText: mode === 'text_to_stencil'
-        ? 'RunPod Qwen Image + Runware Lineart professzionális tetováló vonalrajz elkészült.'
-        : 'RunPod Qwen Image AI kép elkészült.',
+      quality: 'ai_lineart',
+      verdictText: 'RunPod Qwen Image + Runware Lineart professzionális tetováló vonalrajz elkészült.',
       prompt: built.prompt,
       embeddedText: built.embeddedText,
       promptLanguage: normalized.source,

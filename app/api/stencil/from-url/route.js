@@ -11,6 +11,27 @@ import { stencilInsertRow, stencilUpdateRow, creditEntry, CREDIT_COST, STATUS, c
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const WANTERA_IMAGE_URL = (process.env.INKFORGE_IMAGE_FUNCTION_URL || 'https://mxrgdcvmxzhocbdhtlhg.supabase.co/functions/v1/inkforge-image').replace(/\/$/, '');
+export const maxDuration = 300;
+
+async function callWanteraImage(payload, req) {
+  const headers = { 'Content-Type': 'application/json' };
+  const auth = req.headers.get('authorization');
+  if (auth) headers.Authorization = auth;
+  const r = await fetch(WANTERA_IMAGE_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(240000),
+    cache: 'no-store'
+  });
+  const raw = await r.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch (_) {}
+  if (!r.ok || !data.url) throw new Error(data.message || data.error || ('Wantera AI HTTP ' + r.status));
+  return data;
+}
+
 function sbHeaders(extra) {
   return Object.assign({
     apikey: SERVICE_KEY,
@@ -117,61 +138,66 @@ export async function POST(req) {
       });
     }
 
-    let sourceBase64 = Buffer.from(got.bytes).toString('base64');
-    let generated = null;
-
-    if (mode === 'image_to_image_stencil') {
-      // 1) Referenciakép -> profi, tisztított kép.
-      // Z-Image Turbo img2img: olcsó és gyors előfeldolgozó.
-      generated = await zImageImageToImage({
-        imageUrl: referenceUrl,
-        prompt: body.prompt || [
-          'refine the reference image for tattoo design',
-          'preserve the exact subject and important anatomy',
-          'isolated subject on a pure white background',
-          'clean readable contours',
-          'remove scenery, background clutter and unnecessary texture'
-        ].join(', '),
-        strength: Math.max(0.2, Math.min(0.85, parseFloat(body.strength || '0.55'))),
-        size: '1024*1024'
-      });
-      sourceBase64 = generated.base64;
-    }
-
-    // 2) AI kép vagy eredeti kép -> többfázisú stencil worker.
-    if (!runpodReady()) {
-      return Response.json({
-        ok: false,
-        configured: false,
-        generated_png_base64: generated ? generated.base64 : null,
-        generated_image_url: generated ? generated.url : null,
-        generated_engine: generated ? generated.engine : null,
-        error: 'Az AI kép elkészült, de a stencil RunPod endpoint nincs beállítva. Állítsd be a RUNPOD_STENCIL_URL-t.'
-      }, { status: 503 });
-    }
-
-    const start = await runpodRun({
-      mode: 'image_to_stencil',
-      image_base64: sourceBase64,
-      prompt: [
+    // A profi stencil ág közvetlenül a Wantera projekt meglévő AI láncát használja:
+    // RunPod Qwen Image (ha promptból kell kép) + Runware Lineart.
+    const sourceData = check.url;
+    const ai = await callWanteraImage({
+      mode: 'linetrace',
+      image: sourceData,
+      aspectRatio: '1:1',
+      prompt: body.prompt || [
         'professional tattoo transfer stencil',
-        'preserve the subject identity and anatomy',
+        'preserve the exact subject and important anatomy',
         'extract essential outer contour and structural interior lines',
-        'very thin continuous single-weight black linework',
-        'remove all background and tonal shading',
-        'remove grey gradients and texture',
-        'remove duplicate parallel edges',
-        'connect small broken contour gaps',
-        'remove isolated noise and speckles',
-        'white background, print-ready transfer sheet'
-      ].join(', '),
-      negative: 'thick outlines, heavy black fill, grey wash, gradients, background, scenery, noise, duplicate parallel lines, fuzzy edges, photorealistic shading',
-      max_side: 1024,
-      target_width_mm: widthMm,
-      target_height_mm: heightMm,
-      steps: 24,
-      strength: 0.32,
-      return_generated: true
+        'very thin continuous black linework',
+        'clean negative space',
+        'remove background, scenery, grey shading, gradients and texture',
+        'print-ready tattoo stencil on white background'
+      ].join(', ')
+    }, req);
+
+    const aiBytes = await (async () => {
+      const r = await fetch(ai.url, { signal: AbortSignal.timeout(60000), cache: 'no-store' });
+      if (!r.ok) throw new Error('A Wantera AI kép nem tölthető le (HTTP ' + r.status + ').');
+      return new Uint8Array(await r.arrayBuffer());
+    })();
+    const finalBase64 = Buffer.from(aiBytes).toString('base64');
+
+    if (stencilId) await sbPatch('stencils', stencilId, {
+      status: STATUS.ready,
+      branchUsed: ai.model || 'Wantera RunPod + Runware Lineart',
+      coverage: 0,
+      gpuMs: 0,
+      error: null
+    });
+    if (stencilId && studioId) {
+      await sbInsert('credit_ledger', creditEntry(
+        studioId, 'stencil_url_wantera_lineart', CREDIT_COST.generate
+      ));
+    }
+
+    return Response.json({
+      ok: true,
+      ready: true,
+      failed: false,
+      png_base64: finalBase64,
+      generated_png_base64: null,
+      generated_image_url: null,
+      width: Number(ai.width || 1024),
+      height: Number(ai.height || 1024),
+      widthMm,
+      heightMm,
+      dpi,
+      title,
+      mode,
+      stencilId,
+      studioId: body.studio_id || null,
+      userId: body.user_id || null,
+      sourceUrl: check.url,
+      engine: ai.model || 'Wantera RunPod + Runware Lineart',
+      provider: ai.provider || 'Wantera',
+      quality: 'ai_lineart',
+      verdictText: 'Professzionális AI vonalrajz elkészült.'
     });
 
     if (stencilId) await sbPatch('stencils', stencilId, { status: STATUS.processing });

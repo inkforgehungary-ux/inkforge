@@ -164,7 +164,7 @@ export async function POST(req) {
       steps: 24,
       guidance: 5.5,
       return_generated: true
-    }, { text: true });
+    });
 
     if (stencilId) await sbPatch('stencils', stencilId, { status: STATUS.processing });
 

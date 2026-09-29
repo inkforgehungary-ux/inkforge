@@ -350,7 +350,7 @@ export default function StencilTool({ lang }) {
       const hp = await fetch('/api/stencil/health');
       const h = await hp.json();
       setEngineMode(h.mode || 'browser');
-      const gpuOn = h.mode === 'runpod' || h.mode === 'runpod-public';
+      const gpuOn = h.mode === 'runpod' || h.mode === 'runpod-public' || h.mode === 'runpod-wantera';
       if (!gpuOn) throw new Error('A RunPod GPU motor nincs beállítva. Az InkForge most kizárólag RunPoddal generál.');
 
       if (tab === 'text') {

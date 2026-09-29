@@ -56,6 +56,84 @@ export async function POST(req) {
     const stencilId=created?created.id:null;
 
     const mode=body.mode==='text_to_image'?'text_to_image':'text_to_stencil';
+
+    // TEXT -> AI KÉP: közvetlen RunPod FLUX public endpoint.
+    // Így a text_to_image módnak nem kell a stencil workerben külön FLUX handlerre várnia.
+    if (mode === 'text_to_image') {
+      const apiKey = process.env.RUNPOD_API_KEY || '';
+      if (!apiKey) throw new Error('A RUNPOD_API_KEY nincs beállítva.');
+
+      const fluxRes = await fetch(
+        'https://api.runpod.ai/v2/black-forest-labs-flux-1-schnell/runsync',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + apiKey,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            input: {
+              prompt: built.prompt,
+              width: 1024,
+              height: 1024,
+              num_inference_steps: 4
+            }
+          }),
+          signal: AbortSignal.timeout(120000)
+        }
+      );
+
+      const fluxRaw = await fluxRes.text();
+      let flux = {};
+      try { flux = fluxRaw ? JSON.parse(fluxRaw) : {}; } catch (_) {}
+
+      if (!fluxRes.ok) {
+        throw new Error('RunPod FLUX hiba: HTTP ' + fluxRes.status + (fluxRaw ? ' — ' + fluxRaw.slice(0, 800) : ''));
+      }
+
+      const imageUrl = flux && flux.output && (
+        flux.output.image_url ||
+        flux.output.url ||
+        (Array.isArray(flux.output.images) && flux.output.images[0] && (flux.output.images[0].url || flux.output.images[0]))
+      );
+
+      if (!imageUrl || typeof imageUrl !== 'string') {
+        throw new Error('A RunPod FLUX elkészült, de nem adott vissza image URL-t.');
+      }
+
+      const imageRes = await fetch(imageUrl, { signal: AbortSignal.timeout(30000) });
+      if (!imageRes.ok) {
+        throw new Error('A RunPod FLUX képe nem tölthető le: HTTP ' + imageRes.status);
+      }
+
+      const imageBytes = Buffer.from(await imageRes.arrayBuffer());
+      const imageB64 = imageBytes.toString('base64');
+
+      return Response.json({
+        ok: true,
+        ready: true,
+        failed: false,
+        png_base64: imageB64,
+        generated_png_base64: imageB64,
+        width: 1024,
+        height: 1024,
+        widthMm,
+        heightMm,
+        dpi,
+        mode: 'text_to_image',
+        engine: 'RunPod FLUX 1 Schnell',
+        gpuMs: 0,
+        coverage: 0,
+        bridges: 0,
+        islands: 1,
+        quality: 'ai_kep',
+        verdictText: 'AI kép elkészült.',
+        prompt: built.prompt,
+        embeddedText: built.embeddedText,
+        promptLanguage: normalized.source,
+        translatedPrompt: normalized.translated
+      });
+    }
     const start=await runpodRun({
       mode:mode,
       prompt:built.prompt,

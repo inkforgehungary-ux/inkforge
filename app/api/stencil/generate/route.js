@@ -52,15 +52,42 @@ function toBase64(bytes) {
   return Buffer.from(bytes).toString('base64');
 }
 
+const WANTERA_IMAGE_URL = (process.env.INKFORGE_IMAGE_FUNCTION_URL || 'https://mxrgdcvmxzhocbdhtlhg.supabase.co/functions/v1/inkforge-image').replace(/\/$/, '');
+export const maxDuration = 300;
+
+function asDataUri(value, mime) {
+  const s = String(value || '');
+  return s.startsWith('data:') ? s : ('data:' + (mime || 'image/jpeg') + ';base64,' + s);
+}
+
+async function callWanteraImage(payload, req) {
+  const headers = { 'Content-Type': 'application/json' };
+  const auth = req.headers.get('authorization');
+  if (auth) headers.Authorization = auth;
+  const r = await fetch(WANTERA_IMAGE_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(240000),
+    cache: 'no-store'
+  });
+  const raw = await r.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch (_) {}
+  if (!r.ok || !data.url) {
+    throw new Error(data.message || data.error || ('Wantera AI HTTP ' + r.status));
+  }
+  return data;
+}
+
+async function imageUrlToBase64(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(60000), cache: 'no-store' });
+  if (!r.ok) throw new Error('A Wantera AI kép nem tölthető le (HTTP ' + r.status + ').');
+  return Buffer.from(await r.arrayBuffer()).toString('base64');
+}
+
 export async function POST(req) {
   try {
-    if (!runpodReady()) {
-      return Response.json({
-        ok: false, configured: false,
-        error: 'A RunPod GPU motor nincs beállítva. Ellenőrizd a RUNPOD_STENCIL_URL és RUNPOD_API_KEY értékeket.'
-      }, { status: 503 });
-    }
-
     const ct = req.headers.get('content-type') || '';
     let body = {};
     let imageB64 = null;
@@ -109,27 +136,49 @@ export async function POST(req) {
     }));
     const stencilId = created ? created.id : null;
 
-    const start = await runpodRun({
-      mode,
-      image_base64: imageB64,
-      prompt: body.prompt || 'preserve the source subject; clean tattoo stencil line art',
-      max_side: Math.max(512, Math.min(1024, parseInt(body.max_side || '1024', 10))),
-      target_width_mm: widthMm,
-      target_height_mm: heightMm,
-      steps: Math.max(8, Math.min(40, parseInt(body.steps || '22', 10))),
-      strength: Math.max(0.15, Math.min(0.85, parseFloat(body.strength || '0.38'))),
-      return_generated: true
-    });
+    const sourceDataUri = asDataUri(imageB64, 'image/jpeg');
+    const ai = await callWanteraImage({
+      mode: 'linetrace',
+      image: sourceDataUri,
+      aspectRatio: '1:1',
+      prompt: body.prompt || [
+        'professional tattoo transfer stencil',
+        'preserve the exact subject and anatomy',
+        'extract essential outer contour and structural interior lines',
+        'very thin continuous black linework',
+        'clean negative space',
+        'remove background, scenery, grey shading, gradients and texture',
+        'print-ready tattoo stencil on white background'
+      ].join(', ')
+    }, req);
 
+    const finalBase64 = await imageUrlToBase64(ai.url);
     if (stencilId) {
-      await sbPatch('stencils', stencilId, { status: STATUS.processing });
+      await sbPatch('stencils', stencilId, {
+        status: STATUS.ready,
+        branchUsed: ai.model || 'Wantera RunPod + Runware Lineart',
+        coverage: 0,
+        gpuMs: 0,
+        error: null
+      });
+      if (studioId) await sbInsert('credit_ledger', creditEntry(
+        studioId, 'stencil_wantera_lineart', CREDIT_COST.generate
+      ));
     }
 
     return Response.json({
       ok: true,
-      runpodId: start.id,
-      runpodStatus: start.status || 'IN_QUEUE',
-      stencilId, studioId, userId, title, widthMm, heightMm, dpi, mode
+      ready: true,
+      failed: false,
+      png_base64: finalBase64,
+      generated_png_base64: null,
+      width: 1024,
+      height: 1024,
+      stencilId, studioId, userId, title, widthMm, heightMm, dpi, mode,
+      engine: ai.model || 'Wantera RunPod + Runware Lineart',
+      provider: ai.provider || 'Wantera',
+      quality: 'ai_lineart',
+      verdictText: 'Professzionális AI vonalrajz elkészült.'
     });
   } catch (e) {
     return Response.json({

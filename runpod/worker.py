@@ -259,35 +259,91 @@ def _professional_line_drawing(pil: Image.Image, style: str="line") -> np.ndarra
     gray=cv2.cvtColor(rgb,cv2.COLOR_RGB2GRAY)
     gray=cv2.createCLAHE(clipLimit=1.05,tileGridSize=(8,8)).apply(gray)
     gray=cv2.bilateralFilter(gray,9,16,16)
+
+    # InkForge adaptive contour extraction:
+    # Start with a clean structural pass, then relax only when QC says the
+    # stencil is genuinely too sparse. This prevents the old "too few lines"
+    # dead-end without reopening photo/texture noise.
     score=0.82*_dexined_edges(pil)+0.18*_hed_edges(pil)
     broad=cv2.GaussianBlur(score,(0,0),5.0)
     detail=cv2.GaussianBlur(score,(0,0),1.3)
     support=np.clip(0.76*broad+0.24*detail,0,1)
-    params={"line":(94.0,0.48,0.065,(95,190)),"soft":(95.0,0.52,0.075,(100,195)),
-            "stencil":(92.5,0.43,0.055,(100,200)),"hatching":(92.0,0.40,0.05,(95,190)),
-            "bold":(92.0,0.40,0.055,(90,180))}
-    pct,floor,delta,canny_pair=params[style]
-    threshold=max(floor,float(np.percentile(support,pct)))
-    learned=(support>=threshold).astype(np.uint8)*255
-    canny=cv2.Canny(gray,canny_pair[0],canny_pair[1],3,L2gradient=True)
-    local=cv2.bitwise_and((support>=threshold+delta).astype(np.uint8)*255,canny)
-    mask=cv2.bitwise_and(learned,cv2.dilate(canny,np.ones((2,2),np.uint8)))
-    mask=cv2.bitwise_or(mask,local)
-    mask=cv2.morphologyEx(mask,cv2.MORPH_OPEN,cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2,2)))
-    mask=_thin_mask(mask)
-    mask=_remove_border_components(mask)
 
-    # Remove tiny components by physical image fraction and span.
-    num,labels,stats,_=cv2.connectedComponentsWithStats(mask,8)
-    out=np.zeros_like(mask)
-    min_area=max(24,int(h*w*0.000045))
-    min_span=max(24,int(min(h,w)*0.035))
-    max_area=int(h*w*0.055)
-    for i in range(1,num):
-        a=int(stats[i,cv2.CC_STAT_AREA]); bw=int(stats[i,cv2.CC_STAT_WIDTH]); bh=int(stats[i,cv2.CC_STAT_HEIGHT])
-        span=max(bw,bh)
-        if min_area<=a<=max_area and span>=min_span: out[labels==i]=255
-    return _thin_mask(out)
+    params={
+        "line":     [(94.0,0.48,0.065,(95,190)),(92.0,0.40,0.045,(85,175)),(89.5,0.33,0.030,(75,160))],
+        "soft":     [(95.0,0.52,0.075,(100,195)),(93.0,0.44,0.055,(90,185)),(90.5,0.36,0.038,(80,170))],
+        "stencil":  [(92.5,0.43,0.055,(100,200)),(90.5,0.36,0.040,(90,185)),(88.5,0.30,0.028,(80,170))],
+        "hatching": [(92.0,0.40,0.050,(95,190)),(90.0,0.34,0.038,(85,175)),(87.5,0.28,0.026,(75,160))],
+        "bold":     [(92.0,0.40,0.055,(90,180)),(90.0,0.34,0.040,(80,170)),(87.5,0.28,0.028,(70,155))]
+    }
+    candidates=params[style]
+    best=None
+    best_metrics=None
+
+    for idx,(pct,floor,delta,canny_pair) in enumerate(candidates):
+        threshold=max(floor,float(np.percentile(support,pct)))
+        learned=(support>=threshold).astype(np.uint8)*255
+        canny=cv2.Canny(gray,canny_pair[0],canny_pair[1],3,L2gradient=True)
+
+        # Structural support is primary; Canny supplies local contour detail.
+        local=cv2.bitwise_and(
+            (support>=threshold+delta).astype(np.uint8)*255,
+            canny
+        )
+        mask=cv2.bitwise_and(
+            learned,
+            cv2.dilate(canny,np.ones((2,2),np.uint8))
+        )
+        mask=cv2.bitwise_or(mask,local)
+        mask=cv2.morphologyEx(
+            mask,cv2.MORPH_OPEN,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(2,2))
+        )
+        mask=_thin_mask(mask)
+        mask=_remove_border_components(mask)
+
+        num,labels,stats,_=cv2.connectedComponentsWithStats(mask,8)
+        out=np.zeros_like(mask)
+        min_area=max(18,int(h*w*0.000030))
+        min_span=max(20,int(min(h,w)*0.030))
+        max_area=int(h*w*0.055)
+        for i in range(1,num):
+            a=int(stats[i,cv2.CC_STAT_AREA])
+            bw=int(stats[i,cv2.CC_STAT_WIDTH])
+            bh=int(stats[i,cv2.CC_STAT_HEIGHT])
+            span=max(bw,bh)
+            if min_area<=a<=max_area and span>=min_span:
+                out[labels==i]=255
+        candidate=_thin_mask(out)
+        metrics=_qc_metrics(candidate)
+
+        # Prefer a usable stencil. Once coverage is sufficient, don't relax
+        # the threshold further just to increase detail.
+        cov=float(metrics["coverage"])
+        noise=float(metrics["isolated_ratio"])
+        short=float(metrics["short_line_ratio"])
+        border=float(metrics["border_contamination"])
+        usable = 1.0 if cov >= 0.55 else cov/0.55
+        density_penalty=max(0.0,cov-8.0)/8.0
+        score_value=(
+            usable*0.55 +
+            min(1.0,cov/3.5)*0.20 +
+            max(0.0,1.0-noise)*0.12 +
+            max(0.0,1.0-short)*0.08 +
+            max(0.0,1.0-border)*0.05 -
+            density_penalty*0.35
+        )
+
+        if best is None or score_value>best_metrics["_score"]:
+            best=candidate
+            best_metrics=dict(metrics,_score=score_value,pass_index=idx+1)
+
+        # First usable pass wins: preserve the strongest/cleanest structure.
+        if metrics["verdict"] in ("GOOD","ACCEPTABLE") and cov >= 0.55:
+            best=candidate
+            break
+
+    return best if best is not None else np.zeros((h,w),dtype=np.uint8)
 
 def _mask_png(mask: np.ndarray) -> str:
     rgba=np.zeros((mask.shape[0],mask.shape[1],4),dtype=np.uint8)

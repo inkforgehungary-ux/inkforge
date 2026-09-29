@@ -79,6 +79,7 @@ export async function POST(req) {
         prompt: form.get('prompt'),
         title: form.get('title'),
         width_mm: form.get('width_mm'),
+        height_mm: form.get('height_mm'),
         dpi: form.get('dpi'),
         user_id: form.get('user_id'),
         studio_id: form.get('studio_id'),

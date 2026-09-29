@@ -2,10 +2,13 @@ name: Publish InkForge RunPod Worker
 
 on:
   push:
-    tags:
-      - "v*.*.*"
     branches:
       - main
+    tags:
+      - "v*.*.*"
+    paths:
+      - "runpod-worker/**"
+      - ".github/workflows/publish-runpod-worker.yml"
   workflow_dispatch:
 
 permissions:
